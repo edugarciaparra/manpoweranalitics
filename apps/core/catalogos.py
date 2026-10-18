@@ -19,12 +19,14 @@ CONSULTAS = {
     "Departamentos": "SELECT [DepartamentoId] AS Id, [DepartamentoNombre] AS Descripcion FROM [Departamentos]",
     "Localidades": "SELECT [LocalidadId] AS Id, [LocalidadNombre] AS Descripcion FROM [Localidades]",
     "EstadosCiviles": "SELECT [EstadoCivilId] AS Id, [EstadoCivilDescripcion] AS Descripcion FROM [EstadosCiviles]",
-    # Clientes. Nombres de columna de descripción a confirmar con INFORMATION_SCHEMA
+    # Clientes (columnas confirmadas con INFORMATION_SCHEMA el 18/10/2026)
     "SectoresActividad": "SELECT [SectorActividadId] AS Id, [SectorActividadDescripcion] AS Descripcion FROM [SectoresActividad]",
     "TiposCliente": "SELECT [TipoClienteId] AS Id, [TipoClienteDescripcion] AS Descripcion FROM [TiposCliente]",
     "EstadosCliente": "SELECT [EstadoClienteId] AS Id, [EstadoClienteDescripcion] AS Descripcion FROM [EstadosCliente]",
     "Tendencias": "SELECT [TendenciaId] AS Id, [TendenciaDescripcion] AS Descripcion FROM [Tendencias]",
-    "EjecutivosCuenta": "SELECT [EjecutivoCuentaId] AS Id, [EjecutivoCuentaNombre] AS Descripcion FROM [EjecutivosCuenta]",
+    "EjecutivosCuenta": "SELECT [EjecutivoCuentaId] AS Id, "
+                        "LTRIM(RTRIM(ISNULL([EjecutivoCuentaNombre], ''))) + ' ' + LTRIM(RTRIM(ISNULL([EjecutivoCuentaApellido], ''))) "
+                        "AS Descripcion FROM [EjecutivosCuenta]",
     # Solo las competencias que se usan como idioma en los CV
     "Idiomas": "SELECT DISTINCT c.[CompetenciaId] AS Id, c.[CompetenciaNombre] AS Descripcion "
                "FROM [Competencias] c JOIN [CVIdiomas] i ON i.[CVIdiomaId] = c.[CompetenciaId]",
