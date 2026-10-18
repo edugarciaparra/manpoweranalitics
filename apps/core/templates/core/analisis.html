@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block titulo %}{{ item.titulo }} · {{ modulo.titulo }}{% endblock %}
+
+{% block contenido %}
+<div class="container-xl pagina-modulo" style="--c: {{ modulo.color }}">
+  <div class="row g-4">
+    <div class="col-lg-3">{% include "partials/menu_analisis.html" %}</div>
+
+    <div class="col-lg-9">
+      <header class="cabecera cabecera-analisis">
+        <div>
+          <span class="etiqueta-tipo tipo-{{ item.tipo }}">
+            <i class="bi {{ tipo.icono }}" aria-hidden="true"></i>{{ tipo.titulo }} · {{ tipo.pregunta }}
+          </span>
+          <h1>{{ item.titulo }}</h1>
+          <p class="sub">{{ item.descripcion }}</p>
+        </div>
+        <div class="cabecera-acciones">
+          {% if item.usa_periodo %}
+          <nav class="periodos" aria-label="Período">
+            {% for clave, nombre in periodos.items %}
+            <a href="?periodo={{ clave }}" class="periodo{% if clave == periodo %} activo{% endif %}"
+               {% if clave == periodo %}aria-current="true"{% endif %}>{{ nombre }}</a>
+            {% endfor %}
+          </nav>
+          {% else %}
+          <span class="dato-hoy"><i class="bi bi-calendar-check" aria-hidden="true"></i> Datos al día de hoy</span>
+          {% endif %}
+          <button class="btn-asistente" type="button" data-bs-toggle="offcanvas" data-bs-target="#asistente"
+                  aria-controls="asistente">
+            <i class="bi bi-stars" aria-hidden="true"></i> Preguntale a los datos
+          </button>
+        </div>
+      </header>
+
+      <section class="kpis" aria-label="Indicadores">
+        {% for k in datos.kpis %}
+        <div class="kpi{% if k.alerta %} kpi-alerta{% endif %}">
+          <span class="kpi-label">{{ k.label }}</span>
+          <span class="kpi-valor">{{ k.valor }}</span>
+          <span class="kpi-detalle">{% if k.alerta %}<i class="bi bi-exclamation-circle-fill" aria-label="Atención"></i> {% endif %}{{ k.detalle }}</span>
+        </div>
+        {% endfor %}
+      </section>
+
+      <div class="row g-4">
+        <div class="{% if datos.acciones %}col-xl-7{% else %}col-12{% endif %}">
+          <section class="panel panel-grafico">
+            <button type="button" class="btn-icono btn-descargar" id="descargar" title="Descargar imagen del gráfico">
+              <i class="bi bi-download" aria-hidden="true"></i><span class="visually-hidden">Descargar imagen del gráfico</span>
+            </button>
+            <div class="grafico" id="grafico" style="height: {{ datos.grafico_alto|default:340 }}px"
+                 role="img" aria-label="Gráfico: {{ item.titulo }}"></div>
+          </section>
+
+          <section class="panel lectura" aria-labelledby="lectura-t">
+            <h2 id="lectura-t"><i class="bi bi-lightbulb" aria-hidden="true"></i> Qué muestran los datos</h2>
+            <ul>{% for l in datos.lectura %}{% if l %}<li>{{ l }}</li>{% endif %}{% endfor %}</ul>
+          </section>
+        </div>
+
+        {% if datos.acciones %}
+        <div class="col-xl-5">
+          <section class="panel acciones" aria-labelledby="acciones-t">
+            <h2 id="acciones-t"><i class="bi bi-signpost-split" aria-hidden="true"></i> Acciones recomendadas</h2>
+            <ol>
+              {% for a in datos.acciones %}
+              <li class="accion accion-{{ a.prioridad }}">
+                <span class="accion-prioridad"><i class="bi {{ a.prioridad_info.icono }}" aria-hidden="true"></i>{{ a.prioridad_info.texto }}</span>
+                <strong>{{ a.titulo }}</strong>
+                <p>{{ a.detalle }}</p>
+              </li>
+              {% endfor %}
+            </ol>
+          </section>
+        </div>
+        {% endif %}
+      </div>
+
+      {% if datos.tabla %}
+      <section class="panel">
+        <h2>{{ datos.tabla.titulo }}</h2>
+        {% if datos.tabla.filas %}
+        <div class="table-responsive">
+          <table class="table tabla align-middle mb-0">
+            <thead><tr>{% for c in datos.tabla.columnas %}<th scope="col">{{ c }}</th>{% endfor %}</tr></thead>
+            <tbody>
+              {% for fila in datos.tabla.filas %}<tr>{% for v in fila %}<td>{{ v }}</td>{% endfor %}</tr>{% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="vacio">{{ datos.tabla.vacio }}</p>
+        {% endif %}
+      </section>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{# Asistente: panel lateral que se abre desde la cabecera #}
+<div class="offcanvas offcanvas-end asistente" tabindex="-1" id="asistente" aria-labelledby="asistente-titulo"
+     style="--c: {{ modulo.color }}">
+  <div class="offcanvas-header">
+    <div>
+      <h2 class="offcanvas-title" id="asistente-titulo"><i class="bi bi-stars me-1" aria-hidden="true"></i>Preguntale a los datos</h2>
+      <p class="asistente-ayuda">Responde sobre «{{ item.titulo }}»{% if item.usa_periodo %} con el período elegido{% endif %}.</p>
+    </div>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    <div class="sugerencias">
+      {% for s in datos.sugerencias %}
+      <button type="button" class="sugerencia" data-pregunta="{{ s }}">{{ s }}</button>
+      {% endfor %}
+    </div>
+    <div class="conversacion" id="conversacion" aria-live="polite"></div>
+    <form id="form-pregunta" class="pregunta" data-url="{% url 'ia:preguntar' %}"
+          data-modulo="{{ modulo.slug }}" data-analisis="{{ item.slug }}" data-periodo="{{ periodo }}">
+      {% csrf_token %}
+      <label for="pregunta" class="visually-hidden">Tu pregunta</label>
+      <textarea id="pregunta" rows="2" placeholder="Escribí una pregunta…" required></textarea>
+      <button type="submit" class="btn-preguntar"><i class="bi bi-send" aria-hidden="true"></i><span class="visually-hidden">Preguntar</span></button>
+    </form>
+  </div>
+</div>
+
+{{ datos.grafico|json_script:"opcion-grafico" }}
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+<script src="{% static 'js/analisis.js' %}"></script>
+{% endblock %}

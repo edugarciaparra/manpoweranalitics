@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block titulo %}Inicio{% endblock %}
+
+{% block contenido %}
+<section class="portada">
+  <div class="container-xl">
+    <p class="saludo" id="saludo">Hola, {{ usuario_nombre }}.</p>
+    <h1 class="portada-titulo">¿Qué querés analizar?</h1>
+
+    <form class="buscador" role="search" id="buscador" autocomplete="off">
+      <i class="bi bi-search" aria-hidden="true"></i>
+      <label for="buscar" class="visually-hidden">Buscar un módulo</label>
+      <input id="buscar" type="search" placeholder="Pedidos vencidos, facturación, candidatos…"
+             aria-describedby="buscar-ayuda">
+      <kbd class="d-none d-md-inline">Enter</kbd>
+    </form>
+    <p id="buscar-ayuda" class="buscador-ayuda">Escribí para filtrar y Enter para abrir el primero.</p>
+  </div>
+</section>
+
+<section class="container-xl modulos" aria-label="Módulos de análisis">
+  <div class="row g-3 g-lg-4" id="lista-modulos">
+    {% for m in modulos %}
+    <div class="col-12 col-md-6 col-xl-3 modulo-col"
+         data-buscar="{{ m.titulo|lower }} {{ m.descripcion|lower }} {{ m.palabras_clave }}">
+      <a class="modulo" href="{{ m.url }}" style="--c: {{ m.color }}">
+        <span class="modulo-icono"><i class="bi {{ m.icono }}" aria-hidden="true"></i></span>
+        <span class="modulo-nombre">{{ m.titulo }}</span>
+        <span class="modulo-desc">{{ m.descripcion }}</span>
+        <span class="modulo-cifras">
+          {% for r in m.resumen %}
+          <span class="cifra{% if r.alerta and r.valor %} cifra-alerta{% endif %}">
+            <strong>{{ r.valor }}</strong> {{ r.texto }}
+          </span>
+          {% endfor %}
+        </span>
+        <span class="modulo-abrir">Ver {{ m.cantidad_analisis }} análisis</span>
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="sin-resultados" id="sin-resultados" hidden>
+    Ningún módulo coincide con lo que escribiste. Probá con «pedidos», «facturación», «clientes» o «candidatos».
+  </p>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/landing.js' %}"></script>
+{% endblock %}

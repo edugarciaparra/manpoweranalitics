@@ -1,0 +1,11 @@
+from django.urls import path
+
+from . import views
+
+app_name = "core"
+
+urlpatterns = [
+    path("", views.landing, name="landing"),
+    path("<slug:modulo>/", views.modulo, name="modulo"),
+    path("<slug:modulo>/<slug:analisis>/", views.analisis, name="analisis"),
+]
