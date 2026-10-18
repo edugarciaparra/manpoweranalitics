@@ -44,6 +44,7 @@ def analisis(request, modulo, analisis):
 
     periodos, periodo = _periodo(request, item)
     datos = item["funcion"](periodo)
+    datos["conclusiones"] = [c for c in datos.get("conclusiones", []) if c]
 
     return render(request, "core/analisis.html", {
         "modulo": mod,

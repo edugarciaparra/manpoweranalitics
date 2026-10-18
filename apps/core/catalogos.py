@@ -19,6 +19,12 @@ CONSULTAS = {
     "Departamentos": "SELECT [DepartamentoId] AS Id, [DepartamentoNombre] AS Descripcion FROM [Departamentos]",
     "Localidades": "SELECT [LocalidadId] AS Id, [LocalidadNombre] AS Descripcion FROM [Localidades]",
     "EstadosCiviles": "SELECT [EstadoCivilId] AS Id, [EstadoCivilDescripcion] AS Descripcion FROM [EstadosCiviles]",
+    # Clientes. Nombres de columna de descripción a confirmar con INFORMATION_SCHEMA
+    "SectoresActividad": "SELECT [SectorActividadId] AS Id, [SectorActividadDescripcion] AS Descripcion FROM [SectoresActividad]",
+    "TiposCliente": "SELECT [TipoClienteId] AS Id, [TipoClienteDescripcion] AS Descripcion FROM [TiposCliente]",
+    "EstadosCliente": "SELECT [EstadoClienteId] AS Id, [EstadoClienteDescripcion] AS Descripcion FROM [EstadosCliente]",
+    "Tendencias": "SELECT [TendenciaId] AS Id, [TendenciaDescripcion] AS Descripcion FROM [Tendencias]",
+    "EjecutivosCuenta": "SELECT [EjecutivoCuentaId] AS Id, [EjecutivoCuentaNombre] AS Descripcion FROM [EjecutivosCuenta]",
     # Solo las competencias que se usan como idioma en los CV
     "Idiomas": "SELECT DISTINCT c.[CompetenciaId] AS Id, c.[CompetenciaNombre] AS Descripcion "
                "FROM [Competencias] c JOIN [CVIdiomas] i ON i.[CVIdiomaId] = c.[CompetenciaId]",
@@ -42,6 +48,15 @@ _EJEMPLO = {
                     301: "Maldonado", 302: "Punta del Este", 303: "San Carlos", 304: "Piriápolis"},
     "EstadosCiviles": {1: "Soltero/a", 2: "Casado/a", 3: "Unión libre", 4: "Divorciado/a", 5: "Viudo/a"},
     "Idiomas": {501: "Inglés", 502: "Portugués", 503: "Italiano", 504: "Francés", 505: "Alemán"},
+    "SectoresActividad": {1: "Comercio minorista", 2: "Industria manufacturera", 3: "Logística y transporte",
+                          4: "Telecomunicaciones", 5: "Servicios financieros", 6: "Salud", 7: "Energía",
+                          8: "Agro", 9: "Gastronomía y hotelería", 10: "Servicios profesionales",
+                          11: "Construcción", 12: "Sector público"},
+    "TiposCliente": {1: "Corporativo", 2: "PyME", 3: "Gobierno", 4: "Multinacional"},
+    "EstadosCliente": {1: "Activo", 2: "Inactivo", 3: "Prospecto", 4: "Suspendido"},
+    "Tendencias": {1: "Creciendo", 2: "Estable", 3: "Bajando"},
+    "EjecutivosCuenta": {1: "A. Rodríguez", 2: "M. Fernández", 3: "L. Sosa", 4: "P. Martínez",
+                         5: "C. Pereira", 6: "G. Silva", 7: "V. López", 8: "J. Romero"},
 }
 # Cursos y carreras de ejemplo: CursoId -> (CursoNombre, NivelEducativoId)
 _EJEMPLO_CURSOS = {

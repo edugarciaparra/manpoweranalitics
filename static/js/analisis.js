@@ -74,7 +74,8 @@
   const modalEl = document.getElementById("modal-detalle");
   const modal = modalEl ? new bootstrap.Modal(modalEl) : null;
   const POR_PAGINA = 25;
-  const det = { columnas: [], filas: [], filtradas: [], pagina: 0, titulo: "", pildoras: {}, texto: "", chip: null };
+  const det = { columnas: [], filas: [], filtradas: [], pagina: 0, titulo: "", pildoras: {}, texto: "", chip: null,
+                columnaResumen: "Etapa", columnaAvatar: "Nombre" };
   const AVATARES = ["#0B5CAB", "#E1251B", "#0E8A5F", "#6A3FD6", "#E07A00", "#0E7C86"];
 
   function escapar(v) {
@@ -99,9 +100,9 @@
 
   // Celdas con formato: nombre con iniciales y columnas con pastillas de color
   function celda(columna, v) {
-    if (columna === "Nombre" && v) {
+    if (columna === det.columnaAvatar && v) {
       const partes = String(v).split(" ");
-      const ini = (partes[0][0] || "") + (partes[1] ? partes[1][0] : "");
+      const ini = ((partes[0][0] || "") + (partes[1] ? partes[1][0] : "")).toUpperCase();
       const color = AVATARES[[...String(v)].reduce((a, ch) => a + ch.charCodeAt(0), 0) % AVATARES.length];
       return `<span class="avatar" style="background:${color}">${escapar(ini)}</span><strong>${escapar(v)}</strong>`;
     }
@@ -112,9 +113,9 @@
 
   function aplicarFiltros() {
     const q = det.texto;
-    const iEtapa = det.columnas.indexOf("Etapa");
+    const iResumen = det.columnas.indexOf(det.columnaResumen);
     det.filtradas = det.filas.filter((f) =>
-      (!det.chip || f[iEtapa] === det.chip) &&
+      (!det.chip || f[iResumen] === det.chip) &&
       (!q || f.join(" ").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(q)));
     det.pagina = 0;
     document.querySelectorAll(".chip-resumen").forEach((b) => {
@@ -130,7 +131,7 @@
     if (!resumen || !resumen.length) { caja.innerHTML = ""; caja.hidden = true; return; }
     caja.hidden = false;
     caja.innerHTML = resumen.map((r) =>
-      `<button type="button" class="chip-resumen chip-${r.color}" data-valor="${escapar(r.texto)}" aria-pressed="false">
+      `<button type="button" class="chip-resumen chip-${r.color}" data-valor="${escapar(r.filtro || r.texto)}" aria-pressed="false">
          <span class="chip-valor">${r.valor.toLocaleString("es-UY")}</span><span class="chip-texto">${escapar(r.texto)}</span>
        </button>`).join("");
     caja.querySelectorAll(".chip-resumen").forEach((b) => b.addEventListener("click", () => {
@@ -160,6 +161,8 @@
       det.pagina = 0;
       det.titulo = datos.titulo;
       det.pildoras = datos.pildoras || {};
+      det.columnaResumen = datos.columna_resumen || "Etapa";
+      det.columnaAvatar = datos.columna_avatar || "Nombre";
       pintarResumen(datos.resumen);
       document.getElementById("detalle-titulo").textContent = datos.titulo;
       document.getElementById("detalle-sub").textContent =
