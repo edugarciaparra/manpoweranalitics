@@ -576,3 +576,141 @@ body { background: var(--papel); color: var(--tinta); }
   .btn-franja { width: 100%; text-align: center; }
   .modulos { margin-top: -3rem; }
 }
+
+/* ==========================================================================
+   Consultas en lenguaje natural
+   ========================================================================== */
+.nl-portada {
+  color: #fff; padding: clamp(2rem, 5vw, 3.5rem) 0 4.5rem;
+  background:
+    radial-gradient(circle at 90% 15%, rgba(255, 255, 255, .10) 0, rgba(255, 255, 255, .10) 14%, transparent 14.2%),
+    radial-gradient(circle at 4% 110%, rgba(225, 37, 27, .38) 0, rgba(225, 37, 27, .38) 12%, transparent 12.2%),
+    linear-gradient(135deg, var(--mp-azul-osc) 0%, var(--mp-azul) 75%);
+}
+.nl-etiqueta {
+  display: inline-flex; align-items: center; gap: .4rem; background: rgba(255, 255, 255, .14);
+  border-radius: 2rem; padding: .3rem .8rem; font-size: .82rem; font-weight: 700; letter-spacing: .01em;
+}
+.nl-etiqueta .bi { color: #FFD1CE; }
+.nl-titulo { font-size: clamp(1.7rem, 4vw, 2.6rem); font-weight: 800; letter-spacing: -.03em; margin: .8rem 0 .5rem; }
+.nl-sub { max-width: 46rem; color: rgba(255, 255, 255, .82); font-size: 1.02rem; margin: 0; }
+.nl-estado { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1.2rem; }
+.nl-chip {
+  display: inline-flex; align-items: center; gap: .4rem; border-radius: 2rem; padding: .28rem .75rem;
+  font-size: .8rem; font-weight: 600; background: rgba(255, 255, 255, .12); color: rgba(255, 255, 255, .9);
+}
+.nl-chip-ok { background: rgba(27, 175, 122, .25); color: #D4F7E8; }
+.nl-chip-aviso { background: rgba(237, 161, 0, .25); color: #FFEBC2; }
+
+.nl-cuerpo { margin-top: -2.8rem; position: relative; padding-bottom: 2rem; max-width: 1080px; }
+
+.nl-sugerencias { background: #fff; border-radius: 1.1rem; box-shadow: var(--sombra); padding: 1.1rem 1.2rem; margin-bottom: 1.2rem; }
+.nl-sugerencias-titulo { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: var(--tinta-suave); font-weight: 700; margin: 0 0 .7rem; }
+.nl-sugerencias-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .5rem; }
+.nl-sugerencia {
+  display: flex; align-items: flex-start; gap: .55rem; text-align: left; border: 1px solid var(--linea);
+  background: #fff; border-radius: .8rem; padding: .6rem .75rem; font-size: .9rem; color: var(--tinta); line-height: 1.35;
+  transition: border-color .15s, background .15s;
+}
+.nl-sugerencia .bi { color: var(--mp-rojo); margin-top: .1rem; }
+.nl-sugerencia:hover { border-color: var(--mp-azul); background: var(--mp-celeste); }
+
+.nl-conversacion { display: grid; gap: 1.4rem; margin-bottom: 1rem; }
+.nl-turno { display: grid; gap: .6rem; scroll-margin-top: 5rem; }
+.nl-yo {
+  justify-self: end; max-width: min(80%, 40rem); background: var(--mp-azul); color: #fff; font-weight: 600;
+  border-radius: 1.1rem 1.1rem .3rem 1.1rem; padding: .65rem 1rem; box-shadow: 0 6px 16px rgba(11, 92, 171, .25);
+  white-space: pre-wrap;
+}
+.nl-tarjeta { background: #fff; border-radius: 1.1rem; box-shadow: var(--sombra); overflow: hidden; border-top: 4px solid var(--mp-azul); }
+.nl-tarjeta.nl-error { border-top-color: var(--mp-rojo); }
+.nl-tarjeta.nl-aclaracion { border-top-color: #eda100; }
+.nl-tarjeta-cabeza { display: flex; align-items: center; gap: .8rem; padding: 1rem 1.2rem .3rem; }
+.nl-icono {
+  flex-shrink: 0; display: grid; place-items: center; width: 2.3rem; height: 2.3rem; border-radius: 50%;
+  background: var(--mp-celeste); color: var(--mp-azul);
+}
+.nl-error .nl-icono { background: #FDE8E7; color: var(--mp-rojo); }
+.nl-tarjeta-titulo { font-size: 1.08rem; font-weight: 800; color: var(--mp-azul-osc); margin: 0; letter-spacing: -.01em; }
+.nl-meta { margin: .1rem 0 0; font-size: .8rem; color: var(--tinta-suave); }
+.nl-meta:empty { display: none; }
+.nl-respuesta { padding: .5rem 1.2rem 1rem 4.3rem; font-size: .98rem; line-height: 1.55; }
+.nl-respuesta p { margin: 0 0 .5rem; }
+.nl-respuesta ul { margin: .2rem 0 .4rem; padding-left: 1.1rem; }
+.nl-respuesta li { margin-bottom: .25rem; }
+.nl-respuesta li::marker { color: var(--mp-rojo); }
+.nl-pista { color: var(--tinta-suave); font-size: .9rem; }
+.nl-cargando { display: inline-flex; gap: .3rem; padding: .4rem 0; }
+.nl-cargando span { width: .5rem; height: .5rem; border-radius: 50%; background: var(--mp-azul); animation: nl-punto 1s infinite ease-in-out; }
+.nl-cargando span:nth-child(2) { animation-delay: .15s; }
+.nl-cargando span:nth-child(3) { animation-delay: .3s; }
+@keyframes nl-punto { 0%, 80%, 100% { opacity: .25; transform: scale(.8); } 40% { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .nl-cargando span { animation: none; opacity: .6; } }
+
+.nl-vistas { border-top: 1px solid var(--linea); }
+.nl-pestanas { display: flex; align-items: center; gap: .25rem; padding: .5rem .8rem 0; flex-wrap: wrap; background: #FBFCFE; border-bottom: 1px solid var(--linea); }
+.nl-pestanas [data-vista] {
+  border: 0; background: transparent; color: var(--tinta-suave); font-weight: 700; font-size: .87rem;
+  padding: .5rem .8rem; border-radius: .6rem .6rem 0 0; box-shadow: inset 0 -3px 0 transparent;
+}
+.nl-pestanas [data-vista]:hover { color: var(--mp-azul-osc); }
+.nl-pestanas [data-vista].activa { color: var(--mp-azul); background: #fff; box-shadow: inset 0 -3px 0 var(--mp-rojo); }
+.nl-pestanas-acciones { margin-left: auto; padding-bottom: .35rem; }
+.nl-accion {
+  display: inline-flex; align-items: center; gap: .35rem; border: 0; border-radius: .6rem; padding: .4rem .8rem;
+  font-size: .84rem; font-weight: 700; background: var(--mp-rojo); color: #fff;
+}
+.nl-accion:hover { background: #C21D14; }
+.nl-vista { padding: 1rem 1.2rem 1.2rem; }
+.nl-grafico { width: 100%; min-height: 260px; }
+.nl-tabla-barra { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: .7rem; flex-wrap: wrap; }
+.nl-tabla-barra .detalle-buscar { flex: 1; max-width: 22rem; }
+.nl-cuenta { font-size: .84rem; color: var(--tinta-suave); font-weight: 600; }
+.nl-vista .table { font-size: .9rem; }
+.nl-vista thead th { background: var(--mp-celeste); color: var(--mp-azul-osc); font-weight: 700; white-space: nowrap; border-bottom: 0; }
+.nl-paginado { justify-content: flex-end; margin-top: .8rem; }
+.nl-explicacion { color: var(--tinta-suave); font-size: .92rem; margin: 0 0 .6rem; }
+.nl-explicacion:empty { display: none; }
+.nl-sql {
+  background: var(--mp-azul-osc); color: #E6EEF9; border-radius: .8rem; padding: 1rem 1.1rem; font-size: .84rem;
+  max-height: 22rem; overflow: auto; white-space: pre-wrap; margin-bottom: .8rem;
+}
+
+.nl-compositor {
+  position: sticky; bottom: 1rem; z-index: 5; display: flex; align-items: flex-end; gap: .5rem;
+  background: #fff; border-radius: 1.2rem; padding: .55rem .55rem .55rem 1rem;
+  box-shadow: 0 0 0 1px var(--linea), 0 14px 40px rgba(6, 47, 95, .18);
+}
+.nl-compositor:focus-within { box-shadow: 0 0 0 2px var(--mp-azul), 0 14px 40px rgba(6, 47, 95, .18); }
+.nl-compositor textarea {
+  flex: 1; border: 0; outline: 0; resize: none; padding: .55rem 0; font-size: 1rem; background: transparent;
+  max-height: 160px; line-height: 1.4;
+}
+.nl-nueva {
+  flex-shrink: 0; border: 0; background: var(--mp-celeste); color: var(--mp-azul); width: 2.6rem; height: 2.6rem;
+  border-radius: .8rem; font-size: 1.05rem;
+}
+.nl-nueva:hover { background: #D6E6FA; }
+.nl-enviar {
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: .45rem; border: 0; background: var(--mp-rojo); color: #fff;
+  font-weight: 700; height: 2.6rem; padding: 0 1.1rem; border-radius: .8rem; box-shadow: 0 6px 16px rgba(225, 37, 27, .3);
+}
+.nl-enviar:hover { background: #C21D14; }
+.nl-enviar:disabled { opacity: .55; box-shadow: none; }
+.nl-ayuda { text-align: center; font-size: .82rem; color: var(--tinta-suave); margin: 1.6rem 0 0; }
+
+/* Acceso desde la barra y la portada */
+.barra .nav-link.nav-ia { color: #fff; background: var(--mp-rojo); border-radius: .6rem; }
+.barra .nav-link.nav-ia:hover { background: #C21D14; }
+.portada-ia {
+  display: inline-flex; align-items: center; gap: .5rem; margin-top: 1rem; color: #fff; font-weight: 700;
+  background: rgba(255, 255, 255, .14); border-radius: 2rem; padding: .45rem 1rem; text-decoration: none;
+}
+.portada-ia:hover { background: rgba(255, 255, 255, .22); color: #fff; }
+.portada-ia .bi-stars { color: #FFD1CE; }
+
+@media (max-width: 575.98px) {
+  .nl-respuesta { padding-left: 1.2rem; }
+  .nl-yo { max-width: 92%; }
+}
+.nl-compositor textarea::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

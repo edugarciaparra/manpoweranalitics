@@ -1,5 +1,6 @@
 Django>=5.1,<5.3
 python-dotenv>=1.0
+sqlglot>=25,<31        # valida las consultas que arma la IA
 
 # Proveedor de IA: instalá solo el que uses
 # anthropic>=0.40          # IA_PROVEEDOR=claude

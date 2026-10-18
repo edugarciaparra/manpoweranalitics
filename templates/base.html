@@ -35,6 +35,11 @@
             </a>
           </li>
           {% endfor %}
+          <li class="nav-item ms-lg-2">
+            <a class="nav-link nav-ia{% if '/ia/' in request.path %} active{% endif %}" href="{% url 'ia:consultar' %}">
+              <i class="bi bi-stars me-1" aria-hidden="true"></i>Preguntale a la base
+            </a>
+          </li>
         </ul>
       </div>
     </div>

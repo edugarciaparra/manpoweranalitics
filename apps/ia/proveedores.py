@@ -1,28 +1,47 @@
 """
 Capa de proveedores de IA.
 
-Todo el proyecto usa get_proveedor().responder(...). Cuál proveedor se usa se
-decide en .env con IA_PROVEEDOR, así cambiar de Claude a OpenAI/Azure/Gemini
-en otra empresa no requiere tocar código.
+Todo el proyecto usa get_proveedor().responder(sistema, pregunta) o
+get_proveedor().completar(sistema, mensajes). Cuál proveedor se usa se decide
+en .env con IA_PROVEEDOR, así cambiar de Claude a OpenAI/Azure/Gemini en otra
+empresa no requiere tocar código. Hay que instalar el SDK del que se use
+(ver requirements.txt).
 
-Por ahora solo está implementado "mock" (respuestas de ejemplo, sin clave).
-Los demás están armados como esqueleto: hay que instalar su SDK y descomentar.
+mensajes es una lista de {"role": "user" | "assistant", "content": "..."}.
 """
 from django.conf import settings
 
 
+MODELOS_POR_DEFECTO = {
+    "claude": "claude-sonnet-5-5",
+    "openai": "gpt-4.1",
+    "azure": "gpt-4.1",
+    "gemini": "gemini-2.5-flash",
+}
+
+
 class ProveedorIA:
     nombre = "base"
+    simulado = False
+
+    @property
+    def modelo(self):
+        return settings.IA_MODELO or MODELOS_POR_DEFECTO.get(self.nombre, "")
+
+    def completar(self, sistema: str, mensajes: list, max_tokens: int = 1500) -> str:
+        raise NotImplementedError
 
     def responder(self, sistema: str, pregunta: str) -> str:
-        raise NotImplementedError
+        return self.completar(sistema, [{"role": "user", "content": pregunta}])
 
 
 class MockProveedor(ProveedorIA):
     """Respuestas fijas para desarrollar la interfaz sin gastar tokens."""
     nombre = "mock"
+    simulado = True
 
-    def responder(self, sistema, pregunta):
+    def completar(self, sistema, mensajes, max_tokens=1500):
+        pregunta = mensajes[-1]["content"] if mensajes else ""
         return (
             f"Respuesta de ejemplo a: «{pregunta}».\n\n"
             "El asistente todavía no está conectado a un modelo real. "
@@ -34,16 +53,17 @@ class MockProveedor(ProveedorIA):
 class ClaudeProveedor(ProveedorIA):
     nombre = "claude"
 
-    def responder(self, sistema, pregunta):
+    def completar(self, sistema, mensajes, max_tokens=1500):
         import anthropic  # pip install anthropic
         cliente = anthropic.Anthropic(api_key=settings.IA_API_KEY)
         r = cliente.messages.create(
-            model=settings.IA_MODELO,
-            max_tokens=1024,
-            system=sistema,
-            messages=[{"role": "user", "content": pregunta}],
+            model=self.modelo,
+            max_tokens=max_tokens,
+            # El texto del sistema (esquema de la base) se repite en cada pregunta: se cachea
+            system=[{"type": "text", "text": sistema, "cache_control": {"type": "ephemeral"}}],
+            messages=mensajes,
         )
-        return r.content[0].text.strip()
+        return "".join(b.text for b in r.content if getattr(b, "type", "") == "text").strip()
 
 
 class OpenAIProveedor(ProveedorIA):
@@ -53,11 +73,11 @@ class OpenAIProveedor(ProveedorIA):
         from openai import OpenAI  # pip install openai
         return OpenAI(api_key=settings.IA_API_KEY)
 
-    def responder(self, sistema, pregunta):
+    def completar(self, sistema, mensajes, max_tokens=1500):
         r = self._cliente().chat.completions.create(
-            model=settings.IA_MODELO,
-            messages=[{"role": "system", "content": sistema},
-                      {"role": "user", "content": pregunta}],
+            model=self.modelo,
+            max_tokens=max_tokens,
+            messages=[{"role": "system", "content": sistema}] + mensajes,
         )
         return r.choices[0].message.content.strip()
 
@@ -76,11 +96,14 @@ class AzureProveedor(OpenAIProveedor):
 class GeminiProveedor(ProveedorIA):
     nombre = "gemini"
 
-    def responder(self, sistema, pregunta):
+    def completar(self, sistema, mensajes, max_tokens=1500):
         import google.generativeai as genai  # pip install google-generativeai
         genai.configure(api_key=settings.IA_API_KEY)
-        modelo = genai.GenerativeModel(settings.IA_MODELO, system_instruction=sistema)
-        return modelo.generate_content(pregunta).text.strip()
+        modelo = genai.GenerativeModel(self.modelo, system_instruction=sistema)
+        historial = [{"role": "model" if m["role"] == "assistant" else "user", "parts": [m["content"]]}
+                     for m in mensajes]
+        r = modelo.generate_content(historial, generation_config={"max_output_tokens": max_tokens})
+        return r.text.strip()
 
 
 PROVEEDORES = {p.nombre: p for p in
