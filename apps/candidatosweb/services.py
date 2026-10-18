@@ -56,7 +56,7 @@ LEFT JOIN [Departamentos] d ON d.[DepartamentoId] = cw.[DepartamentoId]
 LEFT JOIN [Localidades] l ON l.[LocalidadId] = cw.[LocalidadId]
 LEFT JOIN [EstadosCiviles] ec ON ec.[EstadoCivilId] = cw.[WebUserEstadoCivilId]
 LEFT JOIN [Candidatos] c ON c.[WebUserId] = cw.[WebUserId]
--- entrevistas y asignaciones del candidato: a completar con los nombres reales de las columnas
+-- entrevistas y asignaciones del candidato: se suman cuando armemos la consulta definitiva
 """
 
 

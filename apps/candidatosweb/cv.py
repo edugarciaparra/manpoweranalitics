@@ -17,10 +17,34 @@ from functools import lru_cache
 
 from .services import SI, candidatos_web
 
-# Valores supuestos de los campos de una letra / niveles; ajustar con la consulta de códigos
-TRABAJO_ACTUAL_SI = SI
-FORMACION_COMPLETA_SI = SI
-NIVELES_IDIOMA = {1: "Básico", 2: "Intermedio", 3: "Avanzado", 4: "Nativo / bilingüe"}
+# Códigos reales (consulta del 18/10/2026)
+TRABAJO_ACTUAL_SI = "S"          # CVExpTrabajoActual: S / N
+FORMACION_COMPLETA_SI = "C"      # CVFormCompleto: C = completo, I = incompleto
+# CVIdiomaNivel va de 1 a 5. Falta confirmar qué significa cada número;
+# por ahora se toma 1 como el más bajo y 5 como el más alto.
+NIVELES_IDIOMA = {1: "Nivel 1", 2: "Nivel 2", 3: "Nivel 3", 4: "Nivel 4", 5: "Nivel 5"}
+NIVEL_IDIOMA_BUENO = 3           # desde qué nivel se considera "bueno"
+NIVEL_IDIOMA_ALTO = 5            # nivel más alto, para puestos bilingües
+
+# Consultas para cuando se conecte sgo_new (las descripciones salen de las tablas de referencia)
+CONSULTA_EXPERIENCIA = """
+SELECT e.[WebUserId], e.[CVExpId], e.[CVExpEmpresa], e.[CVExpCargo], e.[CVExpFechaIngreso],
+       e.[CVExpFechaEgreso], e.[CVExpTrabajoActual], cb.[CausalBajaDescripcion]
+FROM [CVExperiencia] e
+LEFT JOIN [CausalesBaja] cb ON cb.[CausalBajaId] = e.[CausalBajaId]
+"""
+CONSULTA_FORMACION = """
+SELECT f.[WebUserId], f.[CVFormId], cc.[CursoNombre], ne.[NivelEducativoId], ne.[NivelEducativoDescripcion],
+       f.[CVFormCompleto], f.[CVFormInstitucion], f.[CVFormFechaInicio], f.[CVFormFechaFin]
+FROM [CVFormacion] f
+JOIN [CursosCarreras] cc ON cc.[CursoId] = f.[CursoId]
+JOIN [NivelesEducativos] ne ON ne.[NivelEducativoId] = cc.[NivelEducativoId]
+"""
+CONSULTA_IDIOMAS = """
+SELECT i.[WebUserId], c.[CompetenciaNombre] AS Idioma, i.[CVIdiomaNivel], i.[CVIdiomaAniosExp]
+FROM [CVIdiomas] i
+JOIN [Competencias] c ON c.[CompetenciaId] = i.[CVIdiomaId]
+"""
 
 NIVELES_EDUCATIVOS = ["Primaria", "Ciclo básico", "Bachillerato", "Técnico / UTU", "Terciario", "Universitario", "Posgrado"]
 CURSOS = {
@@ -106,7 +130,7 @@ def formacion():
             filas.append({
                 "web_user_id": c["id"], "id": i + 1, "nivel": nivel, "nivel_orden": n,
                 "curso": r.choice(CURSOS[nivel]), "institucion": r.choice(INSTITUCIONES[nivel]),
-                "completo": FORMACION_COMPLETA_SI if completo else "N",
+                "completo": FORMACION_COMPLETA_SI if completo else "I",
                 "inicio": inicio, "fin": inicio + timedelta(days=365 * r.randint(1, 5)),
             })
     return tuple(filas)
@@ -124,7 +148,8 @@ def idiomas():
         while len(elegidos) < cantidad:
             elegidos.add(r.choices(list(IDIOMAS), weights=list(IDIOMAS.values()))[0])
         for idioma in elegidos:
-            nivel = r.choices([1, 2, 3, 4], weights=[28, 38, 26, 8] if joven else [48, 34, 14, 4])[0]
+            # Misma forma que la distribución real (el 3 y el 5 son los más comunes)
+            nivel = r.choices([1, 2, 3, 4, 5], weights=[16, 4, 38, 6, 36] if joven else [28, 6, 38, 5, 23])[0]
             filas.append({"web_user_id": c["id"], "idioma": idioma, "nivel": nivel,
                           "anios": max(0, int(r.gauss(nivel * 2, 2)))})
     return tuple(filas)
@@ -146,7 +171,7 @@ def perfil_cv():
             p.update(nivel_max=f["nivel"], nivel_orden=f["nivel_orden"], curso=f["curso"],
                      nivel_completo=f["completo"] == FORMACION_COMPLETA_SI)
     for i in idiomas():
-        perfil[i["web_user_id"]]["idiomas"].append(f"{i['idioma']} ({NIVELES_IDIOMA[i['nivel']].split(' ')[0].lower()})")
+        perfil[i["web_user_id"]]["idiomas"].append(f"{i['idioma']} ({NIVELES_IDIOMA[i['nivel']].lower()})")
     for p in perfil.values():
         p["anios_exp"] = round(p["anios_exp"], 1)
     return perfil

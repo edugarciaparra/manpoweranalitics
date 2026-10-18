@@ -880,7 +880,7 @@ def idiomas(periodo):
     total = len(filas)
     decl = [i for i in cv.idiomas() if i["web_user_id"] in ids]
     lista = [k for k, _ in Counter(i["idioma"] for i in decl).most_common()]
-    colores = [g.AZUL[1], g.AZUL[3], g.AZUL[5], g.SERIES[1]]
+    colores = [g.AZUL[0], g.AZUL[2], g.AZUL[3], g.AZUL[5], g.SERIES[1]]
     grafico_idiomas = g.base(
         legend=g.leyenda(data=list(cv.NIVELES_IDIOMA.values())),
         tooltip={"trigger": "axis", "confine": True, "axisPointer": {"type": "shadow"}},
@@ -892,7 +892,7 @@ def idiomas(periodo):
                  "itemStyle": {"color": colores[nivel - 1]}}
                 for nivel, nombre in cv.NIVELES_IDIOMA.items()],
     )
-    ingles_bueno = {i["web_user_id"] for i in decl if i["idioma"] == "Inglés" and i["nivel"] >= 2}
+    ingles_bueno = {i["web_user_id"] for i in decl if i["idioma"] == "Inglés" and i["nivel"] >= cv.NIVEL_IDIOMA_BUENO}
     por_tramo = [_pct(sum(1 for f in filas if f["id"] in ingles_bueno and _tramo(f["edad"]) == t),
                       sum(1 for f in filas if _tramo(f["edad"]) == t)) for t in TRAMOS_ETIQ]
     grafico_tramo = g.base(
@@ -900,23 +900,23 @@ def idiomas(periodo):
         xAxis=g.eje_categorias(TRAMOS_ETIQ, name="Edad", nameLocation="middle", nameGap=28),
         yAxis=g.eje_valores("fmt:pct"),
         grid={"left": 8, "right": 16, "top": 24, "bottom": 28, "containLabel": True},
-        series=[g.barras("Inglés intermedio o más", por_tramo, g.SERIES[0],
+        series=[g.barras(f"Inglés nivel {cv.NIVEL_IDIOMA_BUENO} o más", por_tramo, g.SERIES[0],
                          label={"show": True, "position": "top", "formatter": "{c}%", "color": g.TINTA_SUAVE})],
     )
     con_idioma = len({i["web_user_id"] for i in decl})
-    avanzado = len({i["web_user_id"] for i in decl if i["idioma"] == "Inglés" and i["nivel"] >= 3})
+    avanzado = len({i["web_user_id"] for i in decl if i["idioma"] == "Inglés" and i["nivel"] >= cv.NIVEL_IDIOMA_ALTO})
     portugues = len({i["web_user_id"] for i in decl if i["idioma"] == "Portugués"})
 
     return {
         "kpis": [
             {"label": "Declaran algún idioma", "valor": f"{_pct(con_idioma, total)}%", "detalle": f"{formato_numero(con_idioma)} personas"},
-            {"label": "Inglés intermedio o más", "valor": formato_numero(len(ingles_bueno)), "detalle": f"{_pct(len(ingles_bueno), total)}% del total"},
-            {"label": "Inglés avanzado o nativo", "valor": formato_numero(avanzado), "detalle": "aptos para puestos bilingües"},
+            {"label": f"Inglés nivel {cv.NIVEL_IDIOMA_BUENO} o más", "valor": formato_numero(len(ingles_bueno)), "detalle": f"{_pct(len(ingles_bueno), total)}% del total"},
+            {"label": f"Inglés nivel {cv.NIVEL_IDIOMA_ALTO}", "valor": formato_numero(avanzado), "detalle": "candidatos para puestos bilingües"},
             {"label": "Portugués", "valor": formato_numero(portugues), "detalle": "útil en zonas de frontera y turismo"},
         ],
         "conclusiones": [
             f"{_pct(con_idioma, total)}% declara al menos un idioma; inglés es por lejos el más común.",
-            f"Solo {formato_numero(avanzado)} personas tienen inglés avanzado o nativo: la reserva para call center bilingüe es chica.",
+            f"Solo {formato_numero(avanzado)} personas tienen inglés en el nivel más alto: es la reserva para puestos bilingües.",
             (f"Los más jóvenes tienen mejor inglés: {por_tramo[0]}% en 18–24 contra {por_tramo[-1]}% en 50+."
              if por_tramo[0] > por_tramo[-1] + 3 else
              f"El inglés no cambia mucho con la edad: {por_tramo[0]}% en 18–24 y {por_tramo[-1]}% en 50+."),
@@ -925,19 +925,19 @@ def idiomas(periodo):
         "secciones": [
             seccion("Idiomas y nivel", grafico=grafico_idiomas, alto=280, detalle="idioma",
                     ayuda_detalle="Hacé clic en una barra para ver quiénes tienen ese idioma con ese nivel.",
-                    explicacion="Cantidad de personas que declararon cada idioma, partida por nivel: del celeste (básico) al "
-                                "azul oscuro (avanzado) y naranja (nativo o bilingüe).",
+                    explicacion="Cantidad de personas que declararon cada idioma, partida por nivel del 1 al 5: del celeste (nivel 1) al "
+                                "azul oscuro y naranja (nivel 5, el más alto).",
                     lectura=[f"Inglés: {formato_numero(sum(1 for i in decl if i['idioma'] == 'Inglés'))} personas."]),
             seccion("Inglés según la edad", grafico=grafico_tramo, alto=280, detalle="ingles_tramo",
-                    ayuda_detalle="Hacé clic en un tramo para ver quiénes tienen inglés intermedio o más.",
-                    explicacion="Porcentaje de cada tramo de edad que declara inglés de nivel intermedio o superior.",
+                    ayuda_detalle=f"Hacé clic en un tramo para ver quiénes tienen inglés nivel {cv.NIVEL_IDIOMA_BUENO} o más.",
+                    explicacion=f"Porcentaje de cada tramo de edad que declara inglés de nivel {cv.NIVEL_IDIOMA_BUENO} o superior (escala del 1 al 5).",
                     lectura=[f"El tramo con más inglés es {TRAMOS_ETIQ[por_tramo.index(max(por_tramo))]} años ({max(por_tramo)}%)."],
                     acciones=[{"prioridad": "media", "titulo": "Validar el nivel de inglés en la entrevista",
                                "detalle": "El nivel es autodeclarado. Para puestos bilingües, una prueba corta evita "
                                           "presentar candidatos que no cumplen."}]),
         ],
         "sugerencias": ["¿Cuántos candidatos bilingües tenemos?", "¿Dónde buscar gente con portugués?"],
-        "contexto_ia": {"con_idioma": con_idioma, "ingles_intermedio_o_mas": len(ingles_bueno),
+        "contexto_ia": {"con_idioma": con_idioma, "ingles_nivel_bueno_o_mas": len(ingles_bueno),
                         "ingles_avanzado": avanzado, "portugues": portugues},
     }
 
@@ -983,8 +983,8 @@ def _filtro_cv(clave, valor, serie):
         return (f"{valor}{' · ' + serie.lower() if nivel else ''}", lambda f: f["id"] in ids,
                 ("Idiomas", lambda f: ", ".join(perfil[f["id"]]["idiomas"])))
     if clave == "ingles_tramo":
-        ids = {i["web_user_id"] for i in cv.idiomas() if i["idioma"] == "Inglés" and i["nivel"] >= 2}
-        return (f"Inglés intermedio o más, {valor} años", lambda f: f["id"] in ids and _tramo(f["edad"]) == valor,
+        ids = {i["web_user_id"] for i in cv.idiomas() if i["idioma"] == "Inglés" and i["nivel"] >= cv.NIVEL_IDIOMA_BUENO}
+        return (f"Inglés nivel {cv.NIVEL_IDIOMA_BUENO} o más, {valor} años", lambda f: f["id"] in ids and _tramo(f["edad"]) == valor,
                 ("Idiomas", lambda f: ", ".join(perfil[f["id"]]["idiomas"])))
     return None
 
