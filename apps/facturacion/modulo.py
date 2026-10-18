@@ -4,10 +4,10 @@ from . import services
 MODULO = {
     "slug": "facturacion",
     "titulo": "Facturación",
-    "descripcion": "Órdenes de facturación, montos por mes y clientes que más facturan.",
+    "descripcion": "Revenue, clientes, evolución temporal, responsables, portafolio de servicios y segmentación RFM.",
     "icono": "bi-receipt",
     "color": "#0E8A5F",
-    "palabras_clave": "ordenes montos cobro factura ingresos",
+    "palabras_clave": "ordenes montos factura ingresos revenue rfm pareto responsables servicios",
 }
 
 

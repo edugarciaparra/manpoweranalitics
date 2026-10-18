@@ -1,58 +1,110 @@
 """
-Datos del módulo Facturación.
+Piezas comunes de las pantallas de Órdenes de facturación (migradas del SGO).
 
-Por ahora con datos de ejemplo. Al conectar sgo_new, se reemplaza el cuerpo
-de cada función por la consulta a las órdenes de facturación.
+Filtros del SGO: divisiones, estado del pedido, servicio, cliente, moneda y
+rango de fechas sobre OrdenFecha. Valores como parámetros (%s).
 """
-from apps.core.utils import ultimos_meses
+from datetime import date
 
-# cliente: (sector, monto base mensual, crecimiento mensual, ranking)
-CLIENTES = {
-    "Antel": ("Telecomunicaciones", 560000, 0.012, "A"),
-    "Tienda Inglesa": ("Retail", 360000, 0.010, "A"),
-    "Ta-Ta": ("Retail", 270000, 0.004, "A"),
-    "Conaprole": ("Industria", 190000, 0.002, "A"),
-    "Disco": ("Retail", 150000, -0.025, "B"),
-    "Farmashop": ("Retail", 60000, 0.045, "B"),
-    "Cutcsa": ("Transporte", 85000, 0.000, "B"),
-    "Copsa": ("Transporte", 70000, -0.030, "B"),
-    "UTE": ("Energía", 95000, -0.018, "B"),
-    "Zonamerica": ("Servicios", 48000, 0.006, "C"),
-    "Pronto!": ("Servicios", 30000, 0.060, "C"),
-}
+from apps.core import sgo
+from apps.core.filtros import Filtro
 
-# Estacionalidad del negocio (enero = índice 0): picos en diciembre y marzo
-ESTACIONAL = [0.92, 0.88, 1.04, 1.00, 0.98, 0.95, 0.97, 0.99, 1.01, 1.03, 1.06, 1.17]
+F_DIVISIONES = Filtro.varios("divisiones_ids", "Divisiones", "Divisiones")
+F_ESTADO = Filtro.uno("estado_id", "Estado del pedido", "EstadosPedido")
+F_SERVICIO = Filtro.uno("servicio_id", "Servicio", "Servicios")
+F_CLIENTE = Filtro.uno("cliente_id", "Cliente", "ClientesConOrdenes")
+F_MONEDA = Filtro.uno("moneda_id", "Moneda", "Monedas")
+F_DESDE = Filtro.fecha("fecha_desde", "Desde")
+F_HASTA = Filtro.fecha("fecha_hasta", "Hasta")
 
-# Variación propia de cada mes para que la serie no sea perfecta
-RUIDO = [1.00, 0.97, 1.03, 0.99, 1.02, 0.98, 1.01, 0.96, 1.04, 1.00, 0.98, 1.02,
-         1.01, 0.99, 1.03, 0.97, 1.00, 1.02, 0.98, 1.01, 0.99, 1.03, 0.97, 1.00]
+FILTROS = [F_DIVISIONES, F_ESTADO, F_SERVICIO, F_CLIENTE, F_MONEDA, F_DESDE, F_HASTA]
+# El resumen del SGO arranca mostrando el año en curso
+FILTROS_ANIO = [F_DIVISIONES, F_ESTADO, F_SERVICIO, F_CLIENTE, F_MONEDA,
+                Filtro.fecha("fecha_desde", "Desde", defecto=lambda: date(date.today().year, 1, 1)),
+                Filtro.fecha("fecha_hasta", "Hasta", defecto=lambda: date(date.today().year, 12, 31))]
 
-
-def facturacion_mensual():
-    """{cliente: [monto por mes]} para los últimos 24 meses completos, y la lista de meses."""
-    meses = ultimos_meses(25)[:-1]  # sin el mes en curso
-    datos = {}
-    for j, (cliente, (_, base, crec, _)) in enumerate(CLIENTES.items()):
-        serie = []
-        for i, (_, mes) in enumerate(meses):
-            ruido = RUIDO[(i + j * 3) % len(RUIDO)]
-            serie.append(round(base * (1 + crec) ** (i - 23) * ESTACIONAL[mes - 1] * ruido, -3))
-        datos[cliente] = serie
-    return meses, datos
+DESDE = """FROM dbo.OrdenesFacturacion o
+    INNER JOIN dbo.Pedidos p ON o.PedidoId = p.PedidoId
+    INNER JOIN dbo.Divisiones d ON p.DivisionId = d.DivisionId"""
 
 
-def total_mensual():
-    meses, datos = facturacion_mensual()
-    return meses, [sum(v[i] for v in datos.values()) for i in range(len(meses))]
+def where(filtros):
+    condiciones, params = ["1=1"], []
+    if filtros.get("divisiones_ids"):
+        texto, valores = sgo.en_lista("p.DivisionId", filtros["divisiones_ids"])
+        condiciones.append(texto)
+        params += valores
+    for clave, columna in (("estado_id", "p.EstadoPedidoId"), ("servicio_id", "o.OrdenServicioId"),
+                           ("cliente_id", "p.ClienteId"), ("moneda_id", "o.OrdenMonCod")):
+        if filtros.get(clave) is not None:
+            condiciones.append(f"{columna} = %s")
+            params.append(filtros[clave])
+    if filtros.get("fecha_desde"):
+        condiciones.append("o.OrdenFecha >= %s")
+        params.append(filtros["fecha_desde"])
+    if filtros.get("fecha_hasta"):
+        condiciones.append("o.OrdenFecha <= %s")
+        params.append(filtros["fecha_hasta"])
+    return " AND ".join(condiciones), params
+
+
+def moneda_principal(filtros):
+    """Símbolo de la moneda con más órdenes (los montos del SGO se suman sin convertir)."""
+    if filtros.get("moneda_id") is not None:
+        w, p = "m.moncod = %s", [filtros["moneda_id"]]
+        r = sgo.valor(f"SELECT TOP 1 RTRIM(m.monsmb) AS monsmb FROM dbo.Monedas m WHERE {w}", p)
+    else:
+        w, p = where(filtros)
+        r = sgo.valor(f"""SELECT TOP 1 RTRIM(m.monsmb) AS monsmb {DESDE}
+            INNER JOIN dbo.Monedas m ON o.OrdenMonCod = m.moncod
+            WHERE {w} GROUP BY m.monsmb ORDER BY COUNT(*) DESC""", p)
+    return (str(r).strip() if r else "") or "$"
+
+
+def monto(v, simbolo="$"):
+    return f"{simbolo} {sgo.num(v):,.0f}".replace(",", ".")
+
+
+def monto_corto(v, simbolo="$"):
+    n = sgo.num(v)
+    if abs(n) >= 1_000_000:
+        return f"{simbolo} {n / 1_000_000:.1f} M".replace(".", ",")
+    if abs(n) >= 1_000:
+        return f"{simbolo} {n / 1_000:.0f} mil"
+    return monto(n, simbolo)
+
+
+COLUMNAS_ORDEN = ["Orden", "Cliente", "Servicio", "División", "Fecha", "Monto", "Moneda"]
+SELECT_ORDEN = """
+    SELECT TOP 500 o.OrdenId, c.ClienteNombre AS cliente, s.ServicioDescripcion AS servicio,
+           d.DivisionDescripcion AS division, CONVERT(VARCHAR(10), o.OrdenFecha, 103) AS fecha,
+           o.OrdenMonto AS monto, ISNULL(RTRIM(m.monsmb), '$') AS moneda
+    FROM dbo.OrdenesFacturacion o
+    INNER JOIN dbo.Pedidos p ON o.PedidoId = p.PedidoId
+    INNER JOIN dbo.Clientes c ON p.ClienteId = c.ClienteId
+    INNER JOIN dbo.Servicios s ON o.OrdenServicioId = s.ServicioId
+    INNER JOIN dbo.Divisiones d ON p.DivisionId = d.DivisionId
+    LEFT JOIN dbo.Monedas m ON o.OrdenMonCod = m.moncod
+    {joins}
+    WHERE {where} {condicion}
+    ORDER BY {orden}
+"""
+
+
+def ordenes(filtros, condicion="", params=None, joins="", orden="o.OrdenFecha DESC"):
+    w, p = where(filtros)
+    sql = SELECT_ORDEN.format(joins=joins, where=w, condicion=f"AND {condicion}" if condicion else "", orden=orden)
+    return sgo.filas(sql, p + list(params or []))
 
 
 def resumen_landing():
-    from apps.core.utils import formato_millones
-    meses, total = total_mensual()
-    _, datos = facturacion_mensual()
-    en_baja = sum(1 for v in datos.values() if sum(v[-3:]) < sum(v[-6:-3]) * .97)
+    try:
+        f = sgo.fila(f"""
+            SELECT COUNT(*) AS ordenes, COUNT(DISTINCT p.ClienteId) AS clientes
+            {DESDE} WHERE o.OrdenFecha >= DATEFROMPARTS(YEAR(GETDATE()), 1, 1)""")
+    except Exception:  # noqa: BLE001
+        return []
     return [
-        {"valor": formato_millones(total[-1]), "texto": "último mes"},
-        {"valor": en_baja, "texto": "clientes en baja", "alerta": True},
+        {"valor": sgo.num(f.get("ordenes")), "texto": "órdenes este año"},
+        {"valor": sgo.num(f.get("clientes")), "texto": "clientes facturados"},
     ]
