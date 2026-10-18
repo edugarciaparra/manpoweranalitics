@@ -19,11 +19,22 @@ devuelve un dict con:
     secciones     lista de bloques, cada uno con:
                     titulo, descripcion (opcional)
                     grafico (opción de ECharts, opcional) y grafico_alto
-                    lectura   frases que explican el gráfico
+                    explicacion  cómo leer el gráfico (qué muestra cada eje, color, etc.)
+                    lectura   frases con lo que muestran los datos
+                    detalle   (opcional) clave para ver los registros al hacer clic
                     tabla     (opcional) {titulo, columnas, filas, vacio}
                     acciones  (opcional) lista de {prioridad, titulo, detalle}
     sugerencias   preguntas sugeridas para el asistente
     contexto_ia   datos resumidos que recibe el asistente
+
+Detalle de registros: si una sección tiene detalle="clave", al hacer clic en el
+gráfico se abre un modal con los registros. Los arma la función registrada con
+
+    @catalogo.detalle("mi-analisis")
+    def detalle(clave, valor, serie, periodo):
+        return {"titulo": ..., "columnas": [...], "filas": [[...], ...]}
+
+donde valor es la categoría cliqueada (barra, sector, mes) y serie el nombre de la serie.
 """
 
 PRIORIDADES = {
@@ -36,9 +47,12 @@ PRIORIDADES = {
 class Catalogo:
     def __init__(self):
         self._analisis = []
+        self._detalles = {}
 
-    def registrar(self, slug, titulo, descripcion, usa_periodo=True, icono="bi-graph-up"):
-        """usa_periodo=False: el análisis muestra la foto de hoy y no tiene selector de período."""
+    def registrar(self, slug, titulo, descripcion, usa_periodo=True, icono="bi-graph-up",
+                  periodos=None, periodo_defecto=None):
+        """usa_periodo=False: el análisis muestra la foto de hoy y no tiene selector de período.
+        periodos / periodo_defecto: opciones propias de período, si no sirven las comunes."""
         def decorador(funcion):
             self._analisis.append({
                 "slug": slug,
@@ -46,10 +60,22 @@ class Catalogo:
                 "descripcion": descripcion,
                 "usa_periodo": usa_periodo,
                 "icono": icono,
+                "periodos": periodos,
+                "periodo_defecto": periodo_defecto,
                 "funcion": funcion,
             })
             return funcion
         return decorador
+
+    def detalle(self, slug):
+        """Registra la función que devuelve los registros detrás de un gráfico del análisis."""
+        def decorador(funcion):
+            self._detalles[slug] = funcion
+            return funcion
+        return decorador
+
+    def obtener_detalle(self, slug):
+        return self._detalles.get(slug)
 
     def obtener(self, slug):
         for a in self._analisis:
@@ -64,7 +90,8 @@ class Catalogo:
         return len(self._analisis)
 
 
-def seccion(titulo, lectura, grafico=None, alto=320, descripcion="", tabla=None, acciones=None):
+def seccion(titulo, lectura, grafico=None, alto=320, descripcion="", tabla=None, acciones=None,
+            explicacion="", detalle=None, ayuda_detalle=""):
     """Arma una sección de un análisis. Las acciones quedan con su prioridad lista para mostrar."""
     for a in acciones or []:
         a["prioridad_info"] = PRIORIDADES[a["prioridad"]]
@@ -76,4 +103,7 @@ def seccion(titulo, lectura, grafico=None, alto=320, descripcion="", tabla=None,
         "lectura": [l for l in lectura if l],
         "tabla": tabla,
         "acciones": acciones or [],
+        "explicacion": explicacion,
+        "detalle": detalle,
+        "ayuda_detalle": ayuda_detalle or "Hacé clic en el gráfico para ver los registros.",
     }

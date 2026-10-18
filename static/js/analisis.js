@@ -40,6 +40,12 @@
       const g = echarts.init(c, null, { renderer: "canvas" });
       g.setOption(opcion);
       graficos[c.id] = g;
+      if (c.dataset.detalle) {
+        g.on("click", (p) => {
+          if (p.componentType !== "series" || (p.seriesName || "").startsWith("_")) return;
+          abrirDetalle(c.dataset.detalle, p.name || "", p.seriesName || "");
+        });
+      }
       new ResizeObserver(() => g.resize()).observe(c);
     };
     if ("IntersectionObserver" in window) {
@@ -61,6 +67,86 @@
         a.download = titulo + ".png";
         a.click();
       });
+    });
+  }
+
+  // ---------- Detalle de registros (modal) ----------
+  const modalEl = document.getElementById("modal-detalle");
+  const modal = modalEl ? new bootstrap.Modal(modalEl) : null;
+  const POR_PAGINA = 25;
+  const det = { columnas: [], filas: [], filtradas: [], pagina: 0, titulo: "" };
+
+  function escapar(v) {
+    return String(v).replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+  }
+
+  function pintarDetalle() {
+    const total = det.filtradas.length;
+    const paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
+    det.pagina = Math.min(det.pagina, paginas - 1);
+    const desde = det.pagina * POR_PAGINA;
+    const visibles = det.filtradas.slice(desde, desde + POR_PAGINA);
+    document.getElementById("detalle-cuerpo").innerHTML = visibles
+      .map((f) => "<tr>" + f.map((v) => "<td>" + escapar(v) + "</td>").join("") + "</tr>").join("");
+    document.getElementById("detalle-vacio").hidden = total > 0;
+    document.getElementById("detalle-cuenta").textContent =
+      total ? `Mostrando ${desde + 1}–${Math.min(desde + POR_PAGINA, total)} de ${total.toLocaleString("es-UY")} registros` : "";
+    document.getElementById("detalle-pagina").textContent = `${det.pagina + 1} / ${paginas}`;
+    document.getElementById("detalle-anterior").disabled = det.pagina === 0;
+    document.getElementById("detalle-siguiente").disabled = det.pagina >= paginas - 1;
+  }
+
+  async function abrirDetalle(clave, valor, serie) {
+    if (!modal) return;
+    document.getElementById("detalle-titulo").textContent = "Cargando registros…";
+    document.getElementById("detalle-sub").textContent = "";
+    document.getElementById("detalle-cabeza").innerHTML = "";
+    document.getElementById("detalle-cuerpo").innerHTML = "";
+    document.getElementById("detalle-filtro").value = "";
+    modal.show();
+    const params = new URLSearchParams({ clave, valor, serie, periodo: modalEl.dataset.periodo });
+    try {
+      const r = await fetch(modalEl.dataset.url + "?" + params);
+      const datos = await r.json();
+      if (!r.ok) throw new Error(datos.error || "No se pudieron cargar los registros.");
+      det.columnas = datos.columnas;
+      det.filas = datos.filas;
+      det.filtradas = datos.filas;
+      det.pagina = 0;
+      det.titulo = datos.titulo;
+      document.getElementById("detalle-titulo").textContent = datos.titulo;
+      document.getElementById("detalle-sub").textContent =
+        `${datos.total.toLocaleString("es-UY")} registros` + (datos.recortado ? " (se muestran los primeros 2.000)" : "") +
+        (datos.descripcion ? " · " + datos.descripcion : "");
+      document.getElementById("detalle-cabeza").innerHTML =
+        "<tr>" + datos.columnas.map((c) => '<th scope="col">' + escapar(c) + "</th>").join("") + "</tr>";
+      pintarDetalle();
+    } catch (e) {
+      document.getElementById("detalle-titulo").textContent = "No se pudieron cargar los registros";
+      document.getElementById("detalle-sub").textContent = e.message + " Cerrá esta ventana y probá de nuevo.";
+    }
+  }
+
+  if (modalEl) {
+    document.getElementById("detalle-filtro").addEventListener("input", (e) => {
+      const q = e.target.value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      det.filtradas = !q ? det.filas : det.filas.filter((f) =>
+        f.join(" ").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(q));
+      det.pagina = 0;
+      pintarDetalle();
+    });
+    document.getElementById("detalle-anterior").addEventListener("click", () => { det.pagina--; pintarDetalle(); });
+    document.getElementById("detalle-siguiente").addEventListener("click", () => { det.pagina++; pintarDetalle(); });
+    // CSV con ; y BOM para que Excel en español lo abra con columnas y tildes correctas
+    document.getElementById("detalle-exportar").addEventListener("click", () => {
+      const celda = (v) => '"' + String(v).replace(/"/g, '""') + '"';
+      const lineas = [det.columnas, ...det.filtradas].map((f) => f.map(celda).join(";"));
+      const blob = new Blob(["\ufeff" + lineas.join("\r\n")], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = (det.titulo || "registros").replace(/[\\/:*?"<>|]/g, "") + ".csv";
+      a.click();
+      URL.revokeObjectURL(a.href);
     });
   }
 

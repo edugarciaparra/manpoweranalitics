@@ -203,6 +203,39 @@ main { flex: 1; }
 .seccion-cabeza h2 { font-size: 1.35rem; font-weight: 800; letter-spacing: -.02em; margin: 0; }
 .seccion-cabeza p { color: var(--tinta-suave); margin: .25rem 0 0; }
 .lectura { margin: 0 0 1.5rem; padding-left: 1.1rem; display: grid; gap: .45rem; }
+.explicacion {
+  background: color-mix(in srgb, var(--c) 7%, white); border-radius: .8rem; padding: .85rem 1rem;
+  margin: -.5rem 0 1.25rem; font-size: .9rem;
+}
+.explicacion strong { display: flex; align-items: center; gap: .4rem; font-size: .85rem; margin-bottom: .25rem; }
+.explicacion strong .bi { color: var(--c); }
+.explicacion p { margin: 0; color: var(--tinta); line-height: 1.5; }
+.con-detalle { cursor: pointer; }
+.ayuda-detalle { margin: .6rem 0 0; font-size: .8rem; color: var(--tinta-suave); display: flex; gap: .35rem; align-items: center; }
+
+/* Modal de detalle */
+.modal-detalle .modal-title { font-size: 1.15rem; font-weight: 800; letter-spacing: -.01em; }
+.detalle-sub { margin: .15rem 0 0; color: var(--tinta-suave); font-size: .86rem; }
+.detalle-barra { display: flex; flex-wrap: wrap; gap: .6rem; margin-bottom: 1rem; }
+.detalle-buscar {
+  flex: 1; min-width: 220px; display: flex; align-items: center; gap: .5rem;
+  border: 1px solid var(--linea); border-radius: .7rem; padding: .1rem .75rem;
+}
+.detalle-buscar:focus-within { border-color: var(--c); }
+.detalle-buscar input { border: 0; outline: 0; flex: 1; padding: .5rem 0; background: transparent; }
+.detalle-buscar .bi { color: var(--tinta-suave); }
+.btn-exportar {
+  display: inline-flex; align-items: center; gap: .4rem; border: 1px solid var(--linea); background: var(--superficie);
+  border-radius: .7rem; padding: .5rem .9rem; font-weight: 600; font-size: .88rem; color: var(--tinta);
+}
+.btn-exportar:hover { border-color: var(--tinta-suave); }
+.btn-exportar .bi { color: #107c41; }
+.tabla-detalle { font-size: .86rem; }
+.tabla-detalle thead th { position: sticky; top: 0; background: var(--superficie); }
+.modal-detalle .modal-footer { justify-content: space-between; }
+.detalle-cuenta { color: var(--tinta-suave); font-size: .85rem; }
+.paginado { display: flex; align-items: center; gap: .5rem; font-size: .88rem; }
+.btn-icono:disabled { opacity: .4; }
 .lectura li { line-height: 1.5; }
 
 .periodos {

@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     "apps.clientes",
     "apps.candidatos",
     "apps.entrevistas",
+    "apps.candidatosweb",
 ]
 
 # Módulos de análisis que aparecen en la landing, en este orden.
@@ -72,6 +73,7 @@ MODULOS_ANALISIS = [
     "apps.pedidos",
     "apps.facturacion",
     "apps.clientes",
+    "apps.candidatosweb",
     "apps.candidatos",
     "apps.entrevistas",
 ]

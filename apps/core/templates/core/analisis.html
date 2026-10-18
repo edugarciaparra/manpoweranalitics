@@ -68,8 +68,19 @@
                       title="Descargar imagen del gráfico">
                 <i class="bi bi-download" aria-hidden="true"></i><span class="visually-hidden">Descargar imagen del gráfico</span>
               </button>
-              <div class="grafico" id="grafico-{{ forloop.counter0 }}" data-indice="{{ forloop.counter0 }}"
+              <div class="grafico{% if s.detalle %} con-detalle{% endif %}" id="grafico-{{ forloop.counter0 }}"
+                   data-indice="{{ forloop.counter0 }}"{% if s.detalle %} data-detalle="{{ s.detalle }}"{% endif %}
                    style="height: {{ s.grafico_alto }}px" role="img" aria-label="Gráfico: {{ s.titulo }}"></div>
+              {% if s.detalle %}
+              <p class="ayuda-detalle"><i class="bi bi-hand-index" aria-hidden="true"></i> {{ s.ayuda_detalle }}</p>
+              {% endif %}
+            </div>
+            {% endif %}
+
+            {% if s.explicacion %}
+            <div class="explicacion">
+              <strong><i class="bi bi-info-circle" aria-hidden="true"></i> Cómo leer este gráfico</strong>
+              <p>{{ s.explicacion }}</p>
             </div>
             {% endif %}
 
@@ -141,6 +152,49 @@
       <textarea id="pregunta" rows="2" placeholder="Escribí una pregunta…" required></textarea>
       <button type="submit" class="btn-preguntar"><i class="bi bi-send" aria-hidden="true"></i><span class="visually-hidden">Preguntar</span></button>
     </form>
+  </div>
+</div>
+
+{# Modal con los registros detrás de un elemento del gráfico #}
+<div class="modal fade modal-detalle" id="modal-detalle" tabindex="-1" aria-labelledby="detalle-titulo" aria-hidden="true"
+     data-url="{% url 'core:detalle' modulo.slug item.slug %}" data-periodo="{{ periodo }}" style="--c: {{ modulo.color }}">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable modal-fullscreen-md-down">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h2 class="modal-title" id="detalle-titulo">Registros</h2>
+          <p class="detalle-sub" id="detalle-sub"></p>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div class="detalle-barra">
+          <div class="detalle-buscar">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <label for="detalle-filtro" class="visually-hidden">Buscar en los registros</label>
+            <input type="search" id="detalle-filtro" placeholder="Buscar en estos registros…">
+          </div>
+          <button type="button" class="btn-exportar" id="detalle-exportar">
+            <i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Exportar a Excel
+          </button>
+        </div>
+        <div class="table-responsive">
+          <table class="table tabla tabla-detalle align-middle mb-0">
+            <thead id="detalle-cabeza"></thead>
+            <tbody id="detalle-cuerpo"></tbody>
+          </table>
+        </div>
+        <p class="vacio" id="detalle-vacio" hidden>No hay registros que coincidan con la búsqueda.</p>
+      </div>
+      <div class="modal-footer">
+        <span id="detalle-cuenta" class="detalle-cuenta"></span>
+        <nav class="paginado" aria-label="Páginas">
+          <button type="button" class="btn-icono" id="detalle-anterior" aria-label="Página anterior"><i class="bi bi-chevron-left"></i></button>
+          <span id="detalle-pagina"></span>
+          <button type="button" class="btn-icono" id="detalle-siguiente" aria-label="Página siguiente"><i class="bi bi-chevron-right"></i></button>
+        </nav>
+      </div>
+    </div>
   </div>
 </div>
 

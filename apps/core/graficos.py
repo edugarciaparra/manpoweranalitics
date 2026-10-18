@@ -61,8 +61,8 @@ def eje_valores(formato=None, **extra):
         "splitLine": {"lineStyle": {"color": GRILLA}},
         "axisLabel": {"color": TINTA_SUAVE},
     }
-    if formato:
-        eje["axisLabel"]["formatter"] = formato
+    # Por defecto, miles con punto (1.000) como se usa en Uruguay
+    eje["axisLabel"]["formatter"] = formato or "fmt:num"
     eje.update(extra)
     return eje
 

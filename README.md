@@ -70,6 +70,18 @@ def mi_analisis(periodo):
     }
 ```
 
+Para que un gráfico abra el detalle de registros al hacer clic, la sección lleva
+`detalle="clave"` y el módulo registra la función que arma la tabla:
+
+```python
+@catalogo.detalle("mi-analisis")
+def detalle(clave, valor, serie, periodo):
+    # valor = categoría cliqueada (barra, mes, departamento...), serie = nombre de la serie
+    return {"titulo": "...", "columnas": [...], "filas": [[...], ...]}
+```
+
+El modal trae buscador, paginado y exportación a Excel (CSV). Muestra hasta 2.000 filas.
+
 Aparece solo en el menú lateral y en la portada del módulo. Con `usa_periodo=False`
 muestra la foto de hoy y no tiene selector de período.
 
