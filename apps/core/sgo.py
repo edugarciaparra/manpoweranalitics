@@ -57,6 +57,8 @@ _POZOS = {
     "sexo": ["F", "M"],
     "segmento": ["Champions", "Leales", "Potenciales", "Nuevos", "En riesgo", "Inactivos"],
     "motivo": ["Fin de contrato", "Renuncia", "Despido", "Fin de zafra", "Mejor oferta"],
+    "prueba_desc": ["Psicotécnico", "Excel", "Inglés", "Atención al cliente", "Lógica", "Wartegg", "Bender"],
+    "forma_pago_desc": ["Transferencia", "Depósito", "Cheque", "Efectivo"],
     "causal": ["Fin de contrato", "Renuncia", "Despido", "Fin de zafra", "Mejor oferta"],
     "dia_semana": ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"],
     "rango": ["0-7 días", "8-15 días", "16-30 días", "31-60 días", "Más de 60 días"],
@@ -72,6 +74,7 @@ _POZOS = {
 
 
 _NUMERICAS_AGREGADAS = set()
+_LITERALES_CASE = {}
 
 # Para la columna "label" de ejemplo se elige el pozo según la tabla que describe
 _PISTAS_LABEL = [
@@ -83,6 +86,8 @@ _PISTAS_LABEL = [
     ("Localidad", "localidad"), ("CausalBaja", "causal"), ("Sexo", "sexo"), ("Segmento", "segmento"),
     ("NivelEducativo", "nivel"), ("Marca", "marca"), ("Linea", "linea"), ("PracticeArea", "practice"),
     ("CentroCosto", "centro"), ("SectorActividad", "sector"),
+    ("PruebaDescripcion", "prueba_desc"), ("CheckRefEmpresa", "cliente"), ("CheckRefMotivoEgreso", "causal"),
+    ("FormaPagoDescripcion", "forma_pago_desc"),
 ]
 
 
@@ -102,6 +107,7 @@ def _alias(sql):
         select = arbol if isinstance(arbol, exp.Select) else arbol.find(exp.Select)
         nombres = []
         _NUMERICAS_AGREGADAS.clear()
+        _LITERALES_CASE.clear()
         for e in select.expressions:
             nombre = e.alias_or_name or e.sql(dialect="tsql")
             nombres.append(nombre)
@@ -110,6 +116,12 @@ def _alias(sql):
             es_numero = isinstance(interior, exp.Literal) and not interior.is_string
             if interior.find(exp.AggFunc) or isinstance(interior, exp.Round) or es_numero:
                 _NUMERICAS_AGREGADAS.add(nombre)
+            elif isinstance(interior, exp.Case):
+                # Columnas armadas con CASE ... THEN 'texto': el ejemplo usa esos textos.
+                textos = [x.this for x in interior.find_all(exp.Literal) if x.is_string and x.parent is not None
+                          and x.arg_key in ("true", "default")]
+                if textos:
+                    _LITERALES_CASE[nombre] = list(dict.fromkeys(textos))
         top = select.args.get("limit")
         cantidad = None
         if top is not None:
@@ -137,6 +149,7 @@ def _ejemplo(sql, params):
     nombres, top, agrupa, agregado = _alias(sql)
     numericas = set(_NUMERICAS_AGREGADAS)
     pozo_label = _pozo_label(sql)
+    literales = dict(_LITERALES_CASE)
     semilla = int(hashlib.md5((sql + repr(params)).encode()).hexdigest()[:8], 16)
     rnd = random.Random(semilla)
     base_n = rnd.uniform(80, 450)
@@ -144,6 +157,8 @@ def _ejemplo(sql, params):
         n = 1
     else:
         n = min(top or rnd.randint(6, 12), 40)
+        if agrupa and literales:
+            n = min(n, max(len(v) for v in literales.values()))
     hoy = date.today().replace(day=1)
     meses = []
     a, m = hoy.year, hoy.month
@@ -169,6 +184,8 @@ def _ejemplo(sql, params):
                 v = 1000 + i
             elif _FECHA.search(bajo) and not _NUMERICAS.search(bajo.replace("fecha", "")):
                 v = (date.today() - timedelta(days=rnd.randint(0, 400))).strftime("%d/%m/%Y")
+            elif nombre in literales:
+                v = literales[nombre][i % len(literales[nombre])]
             elif bajo in ("label", "dsc", "descripcion", "nombre") and pozo_label and nombre not in numericas:
                 v = pozo_label[i % len(pozo_label)] if i < len(pozo_label) else \
                     f"{pozo_label[i % len(pozo_label)]} {i // len(pozo_label) + 1}"

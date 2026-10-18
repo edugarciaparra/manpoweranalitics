@@ -77,4 +77,10 @@ CODIGOS = """
 - Candidato contratado después de una entrevista: existe Asignaciones con el mismo CandidatoId y AsignacionFechaIngreso > EntrevistaFecha.
 - Viáticos: HistorialViaticos.HistorialViaticosImporte (monto), HistorialViaticosFecha, HistorialViaticosObs (observación).
 - Asignación vigente: AsignacionFechaEgreso IS NULL.
+- Asignaciones.AsignacionDesempenoNum: 0 sin calificar, 1 Deficiente, 2 Regular, 3 Bueno, 4 Muy bueno, 5 Excelente.
+- Asignaciones.AsignacionCalidadTrabajo: 'E' Excelente, 'M' Muy bueno, 'B' Bueno, 'R' Regular, 'D' Deficiente, 'N' o NULL sin calificar.
+- Asignaciones.AsignacionVolverContratar = 'S': el cliente lo volvería a contratar. Asignaciones.FormaPagoId = FormasPago.FormaPagoId.
+- CandidatoCheckReferencias.CheckRefNivelSeguridad: 'A' Alto, 'M' Medio, 'B' Bajo, 'N' No enviable. CheckRefRecontratar es texto libre.
+- CandidatoPruebas.CandidatoPruebaResultado es texto: puede ser una fracción ('21/27', aprueba con 70 sobre 100) o 'Apto', 'Aprobado', 'No apto'...
+- PedidosPostulante.EventoId 11 o 12 en el último registro del candidato en el pedido = fue dado de alta (trabajó).
 """

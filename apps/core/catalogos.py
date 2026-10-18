@@ -47,6 +47,12 @@ CONSULTAS = {
     "ClientesAnalitica": "SELECT DISTINCT c.[ClienteId] AS Id, c.[ClienteNombre] AS Descripcion FROM [Clientes] c "
                          "JOIN [analitica_cliente_individual] a ON a.[ClienteId] = c.[ClienteId]",
     "AniosAnalitica": "SELECT DISTINCT [Anio] AS Id, CAST([Anio] AS VARCHAR(4)) AS Descripcion FROM [analitica_cliente_individual]",
+    "ClientesConAsignaciones": "SELECT DISTINCT c.[ClienteId] AS Id, c.[ClienteNombre] AS Descripcion FROM [Clientes] c "
+                               "JOIN [Pedidos] p ON p.[ClienteId] = c.[ClienteId] JOIN [Asignaciones] a ON a.[PedidoId] = p.[PedidoId]",
+    "ClientesConEntrevistas": "SELECT DISTINCT c.[ClienteId] AS Id, c.[ClienteNombre] AS Descripcion FROM [Clientes] c "
+                              "JOIN [Pedidos] p ON p.[ClienteId] = c.[ClienteId] JOIN [Entrevistas] e ON e.[EntrevistaPedidoId] = p.[PedidoId]",
+    "AniosAsignaciones": "SELECT DISTINCT YEAR([AsignacionFechaIngreso]) AS Id, CAST(YEAR([AsignacionFechaIngreso]) AS VARCHAR(4)) "
+                         "AS Descripcion FROM [Asignaciones] WHERE [AsignacionFechaIngreso] > '1900-01-01'",
     "Paises": "SELECT [PaisId] AS Id, [PaisNombre] AS Descripcion FROM [Paises]",
     "CategoriasLibretaConducir": "SELECT [CategoriaLibretaConducirId] AS Id, [CategoriaLibretaConducirDescri] AS Descripcion "
                                  "FROM [CategoriasLibretaConducir]",
@@ -106,6 +112,10 @@ _EJEMPLO = {
     "ClientesAnalitica": {1: "Comercial del Sur", 2: "Industrias Oriental", 3: "Logística Atlántica",
                           4: "Grupo Rioplatense", 5: "Laboratorios Andina"},
     "AniosAnalitica": {2022: "2022", 2023: "2023", 2024: "2024", 2025: "2025", 2026: "2026"},
+    "ClientesConAsignaciones": {1: "Comercial del Sur", 2: "Industrias Oriental", 3: "Logística Atlántica",
+                                4: "Grupo Rioplatense", 5: "Laboratorios Andina"},
+    "ClientesConEntrevistas": {1: "Comercial del Sur", 2: "Industrias Oriental", 3: "Logística Atlántica"},
+    "AniosAsignaciones": {2022: "2022", 2023: "2023", 2024: "2024", 2025: "2025", 2026: "2026"},
     "Paises": {1: "Uruguay", 2: "Argentina", 3: "Brasil", 4: "Venezuela", 5: "Cuba", 6: "Paraguay"},
     "CategoriasLibretaConducir": {1: "A", 2: "B", 3: "C", 4: "D", 5: "E", 6: "F", 7: "G"},
     "Pruebas": {1: "Psicotécnico", 2: "Excel", 3: "Inglés", 4: "Atención al cliente", 5: "Lógica"},

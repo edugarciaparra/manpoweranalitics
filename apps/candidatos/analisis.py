@@ -679,14 +679,16 @@ _RANGOS_SALARIO = [("No especificado", "c.CandidatoSalarioPretendido = 0 OR c.Ca
                    ("Menos de $20 mil", "c.CandidatoSalarioPretendido < 20000"), ("$20 a $40 mil", "c.CandidatoSalarioPretendido < 40000"),
                    ("$40 a $60 mil", "c.CandidatoSalarioPretendido < 60000"), ("$60 a $80 mil", "c.CandidatoSalarioPretendido < 80000"),
                    ("Más de $80 mil", "1=1")]
-COLUMNAS_CONTACTO = ["Candidato Id", "Candidato", "Perfil", "Email", "Celular", "Teléfono", "Salario pretendido"]
+COLUMNAS_CONTACTO = ["Candidato Id", "Candidato", "Perfil", "Tiene email", "Tiene celular", "Tiene teléfono", "Salario pretendido"]
 
 
 def _candidatos_contacto(filtros, condicion, params=None, joins="", extra="", columnas=None):
     w, p = where(filtros)
     return sgo.filas(f"""
         SELECT TOP 500 c.CandidatoId, {NOMBRE} AS candidato, RTRIM(pc.PerfilCandidatoDescripcion) AS perfil,
-               RTRIM(c.CandidatoEmail) AS email, RTRIM(c.CandidatoCelular) AS celular, RTRIM(c.CandidatoTelefono) AS telefono,
+               CASE WHEN {_TIENE_EMAIL} THEN 'Sí' ELSE 'No' END AS tiene_email,
+               CASE WHEN {_TIENE_CEL} THEN 'Sí' ELSE 'No' END AS tiene_celular,
+               CASE WHEN c.CandidatoTelefono IS NOT NULL AND RTRIM(c.CandidatoTelefono) != '' THEN 'Sí' ELSE 'No' END AS tiene_telefono,
                c.CandidatoSalarioPretendido AS salario{extra}
         FROM dbo.Candidatos c LEFT JOIN dbo.PerfilesCandidatos pc ON c.PerfilCandidatoId = pc.PerfilCandidatoId {joins}
         WHERE {w} AND ({condicion}) ORDER BY c.CandidatoApellido, c.CandidatoNombre""", p + list(params or []))
@@ -920,3 +922,777 @@ def detalle_problemas_datos(clave, valor, serie, periodo, filtros):
         condicion = next((c for n, c, _ in PROBLEMAS if n == valor), "1=0")
     filas = _candidatos_contacto(filtros, condicion, params)
     return respuesta_detalle(f"Candidatos · {valor}" + (f" · {serie}" if clave == "perfil" else ""), COLUMNAS_CONTACTO, filas)
+
+
+# ==========================================================================
+# 8. Pruebas y evaluaciones (can_pru)
+# ==========================================================================
+F_PRUEBA = s.Filtro.uno("prueba_id", "Prueba", "Pruebas")
+_RES = "RTRIM(cp.CandidatoPruebaResultado)"
+_NUM = f"TRY_CAST(SUBSTRING({_RES}, 1, CHARINDEX('/', {_RES}) - 1) AS FLOAT)"
+_DEN = f"TRY_CAST(SUBSTRING({_RES}, CHARINDEX('/', {_RES}) + 1, 10) AS FLOAT)"
+_APROBADOS = "'APROBADO', 'APTO', 'EXCELENTE', 'BUENO', 'APROBADA', 'APTA', 'FAVORABLE'"
+_REPROBADOS = "'REPROBADO', 'NO APTO', 'MALO', 'INSUFICIENTE', 'REPROBADA'"
+# Resultado de una prueba como en el SGO: una fracción (21/27) aprueba con 70 o más
+# sobre 100; si no, se mira el texto.
+RESULTADO = (f"CASE WHEN CHARINDEX('/', {_RES}) > 0 THEN CASE WHEN {_NUM} IS NOT NULL AND {_DEN} > 0 "
+             f"THEN CASE WHEN {_NUM} * 100.0 / {_DEN} >= 70 THEN 'Aprobado' ELSE 'No aprobado' END ELSE 'Otro resultado' END "
+             f"WHEN UPPER({_RES}) IN ({_APROBADOS}) THEN 'Aprobado' WHEN UPPER({_RES}) IN ({_REPROBADOS}) THEN 'No aprobado' "
+             f"ELSE 'Otro resultado' END")
+_RANGOS_PRUEBAS = ["Sin pruebas", "1 prueba", "2 pruebas", "3 pruebas", "4+ pruebas"]
+COLUMNAS_PRUEBA = ["Candidato Id", "Candidato", "Perfil", "Prueba", "Resultado", "Clasificación", "Fecha"]
+
+
+def _where_pruebas(filtros):
+    """Condiciones del candidato más la prueba elegida (sobre cp)."""
+    w, p = where(filtros)
+    if filtros.get("prueba_id") is not None:
+        w += " AND cp.PruebaId = %s"
+        p = p + [filtros["prueba_id"]]
+    return w, p
+
+
+def _pruebas(filtros, condicion="1=1", params=None):
+    w, p = _where_pruebas(filtros)
+    return sgo.filas(f"""
+        SELECT TOP 500 c.CandidatoId, {NOMBRE} AS candidato, RTRIM(pc.PerfilCandidatoDescripcion) AS perfil,
+               RTRIM(pr.PruebaDescripcion) AS prueba, {_RES} AS resultado, {RESULTADO} AS clasificacion,
+               cp.CandidatoPruebaFecha AS fecha
+        FROM dbo.CandidatoPruebas cp INNER JOIN dbo.Candidatos c ON cp.CandidatoId = c.CandidatoId
+        INNER JOIN dbo.Pruebas pr ON cp.PruebaId = pr.PruebaId
+        LEFT JOIN dbo.PerfilesCandidatos pc ON c.PerfilCandidatoId = pc.PerfilCandidatoId
+        WHERE {w} AND ({condicion}) ORDER BY cp.CandidatoPruebaFecha DESC""", p + list(params or []))
+
+
+_CANT_PRUEBAS = "(SELECT COUNT(*) FROM dbo.CandidatoPruebas cpx WHERE cpx.CandidatoId = c.CandidatoId)"
+
+
+@catalogo.registrar(
+    "pruebas", "Pruebas y evaluaciones",
+    "Cuántos candidatos fueron evaluados, qué pruebas se toman más, cuántas se aprueban y si los evaluados llegan más a entrevista y asignación.",
+    usa_periodo=False, icono="bi-ui-checks", filtros=[s.F_PERFIL, s.F_PAIS, F_PRUEBA],
+)
+def pruebas(periodo, filtros):
+    w, p = where(filtros)
+    wp, pp = _where_pruebas(filtros)
+    desde = "FROM dbo.CandidatoPruebas cp INNER JOIN dbo.Candidatos c ON cp.CandidatoId = c.CandidatoId"
+    k = sgo.fila(f"""
+        SELECT (SELECT COUNT(*) FROM dbo.Candidatos c WHERE {w}) AS total_candidatos,
+               (SELECT COUNT(DISTINCT cp.CandidatoId) {desde} WHERE {wp}) AS candidatos_evaluados,
+               (SELECT COUNT(*) {desde} WHERE {wp}) AS total_pruebas,
+               (SELECT SUM(CASE WHEN {RESULTADO} = 'Aprobado' THEN 1 ELSE 0 END) {desde} WHERE {wp}) AS pruebas_aprobadas""",
+                 p + pp + pp + pp)
+    cant = sgo.filas(f"""
+        SELECT rango AS label, COUNT(*) AS value FROM (
+            SELECT CASE WHEN COUNT(cp.PruebaId) = 0 THEN 'Sin pruebas' WHEN COUNT(cp.PruebaId) = 1 THEN '1 prueba'
+                        WHEN COUNT(cp.PruebaId) = 2 THEN '2 pruebas' WHEN COUNT(cp.PruebaId) = 3 THEN '3 pruebas' ELSE '4+ pruebas' END AS rango
+            FROM dbo.Candidatos c LEFT JOIN dbo.CandidatoPruebas cp ON c.CandidatoId = cp.CandidatoId
+            WHERE {w} GROUP BY c.CandidatoId) x GROUP BY rango""", p)
+    cant = _orden(cant, _RANGOS_PRUEBAS)
+    tipos = sgo.filas(f"""
+        SELECT TOP 15 RTRIM(pr.PruebaDescripcion) AS label, COUNT(*) AS value, COUNT(DISTINCT cp.CandidatoId) AS candidatos
+        {desde} INNER JOIN dbo.Pruebas pr ON cp.PruebaId = pr.PruebaId
+        WHERE {wp} GROUP BY pr.PruebaId, pr.PruebaDescripcion ORDER BY value DESC""", pp)
+    resultados = sgo.filas(f"""
+        SELECT TOP 15 RTRIM(pr.PruebaDescripcion) AS label, COUNT(*) AS total,
+               SUM(CASE WHEN {RESULTADO} = 'Aprobado' THEN 1 ELSE 0 END) AS aprobados,
+               SUM(CASE WHEN {RESULTADO} = 'No aprobado' THEN 1 ELSE 0 END) AS reprobados,
+               SUM(CASE WHEN {RESULTADO} = 'Otro resultado' THEN 1 ELSE 0 END) AS otros
+        {desde} INNER JOIN dbo.Pruebas pr ON cp.PruebaId = pr.PruebaId
+        WHERE {wp} GROUP BY pr.PruebaId, pr.PruebaDescripcion HAVING COUNT(*) >= 5 ORDER BY total DESC""", pp)
+    perfiles = sgo.filas(f"""
+        SELECT TOP 15 RTRIM(pc.PerfilCandidatoDescripcion) AS label, COUNT(DISTINCT c.CandidatoId) AS total_candidatos,
+               COUNT(DISTINCT cp.CandidatoId) AS con_pruebas, COUNT(DISTINCT c.CandidatoId) - COUNT(DISTINCT cp.CandidatoId) AS sin_pruebas
+        FROM dbo.Candidatos c {JOIN_PERFIL} LEFT JOIN dbo.CandidatoPruebas cp ON c.CandidatoId = cp.CandidatoId
+        WHERE {w} GROUP BY pc.PerfilCandidatoId, pc.PerfilCandidatoDescripcion ORDER BY total_candidatos DESC""", p)
+    anios = sgo.filas(f"""
+        SELECT YEAR(cp.CandidatoPruebaFecha) AS anio, COUNT(*) AS cantidad_pruebas, COUNT(DISTINCT cp.CandidatoId) AS candidatos_unicos
+        {desde} WHERE {wp} AND cp.CandidatoPruebaFecha > '1900-01-01'
+        GROUP BY YEAR(cp.CandidatoPruebaFecha) HAVING YEAR(cp.CandidatoPruebaFecha) >= YEAR(GETDATE()) - 5 ORDER BY anio""", pp)
+    exito = sgo.filas(f"""
+        SELECT grupo AS label, COUNT(*) AS total_candidatos,
+               ROUND(AVG(CASE WHEN EXISTS_E = 1 THEN 100.0 ELSE 0 END), 1) AS pct_entrevistados,
+               ROUND(AVG(CASE WHEN EXISTS_A = 1 THEN 100.0 ELSE 0 END), 1) AS pct_asignados
+        FROM (SELECT CASE WHEN EXISTS (SELECT 1 FROM dbo.CandidatoPruebas cpx WHERE cpx.CandidatoId = c.CandidatoId)
+                          THEN 'Con pruebas' ELSE 'Sin pruebas' END AS grupo,
+                     CASE WHEN EXISTS (SELECT 1 FROM dbo.Entrevistas e WHERE e.CandidatoId = c.CandidatoId) THEN 1 ELSE 0 END AS EXISTS_E,
+                     CASE WHEN EXISTS (SELECT 1 FROM dbo.Asignaciones a WHERE a.CandidatoId = c.CandidatoId) THEN 1 ELSE 0 END AS EXISTS_A
+              FROM dbo.Candidatos c WHERE {w}) x GROUP BY grupo""", p)
+    exito = _orden(exito, ["Con pruebas", "Sin pruebas"])
+    top = sgo.filas(f"""
+        SELECT TOP 20 c.CandidatoId, {NOMBRE} AS candidato, RTRIM(pc.PerfilCandidatoDescripcion) AS perfil, COUNT(*) AS total_pruebas,
+               SUM(CASE WHEN {RESULTADO} = 'Aprobado' THEN 1 ELSE 0 END) AS aprobadas,
+               ROUND(AVG(CASE WHEN {RESULTADO} = 'Aprobado' THEN 100.0 ELSE 0 END), 1) AS pct_aprobacion
+        {desde} {JOIN_PERFIL}
+        WHERE {wp} GROUP BY c.CandidatoId, c.CandidatoNombre, c.CandidatoApellido, pc.PerfilCandidatoDescripcion
+        HAVING COUNT(*) >= 2 ORDER BY pct_aprobacion DESC, total_pruebas DESC""", pp)
+
+    total_c, evaluados = num(k.get("total_candidatos")), num(k.get("candidatos_evaluados"))
+    evaluados = min(evaluados, total_c)
+    total_p, aprobadas = num(k.get("total_pruebas")), num(k.get("pruebas_aprobadas"))
+    aprobadas = min(aprobadas, total_p)
+    tasa = proporcion(aprobadas, total_p)
+
+    def valor_exito(grupo, campo):
+        return next((num(r[campo]) for r in exito if r["label"] == grupo), 0)
+
+    secciones = [
+        seccion("Cantidad de pruebas por candidato", [lider(cant, "label", "value", "candidatos")],
+                g.columnas(etiquetas(cant), {"Candidatos": valores(cant, "value")}, rotar=0),
+                explicacion="Cuántas pruebas rindió cada candidato.", detalle="rango",
+                ayuda_detalle="Hacé clic en una barra para ver esos candidatos."),
+        seccion("Pruebas más tomadas (top 15)", [lider(tipos, "label", "value", "pruebas")],
+                g.ranking(etiquetas(tipos), valores(tipos, "value"), "Pruebas", g.SERIES[1]), alto=g.alto_ranking(len(tipos)),
+                explicacion="Cantidad de veces que se tomó cada prueba.", detalle="prueba",
+                ayuda_detalle="Hacé clic en una prueba para ver sus resultados.",
+                tabla=tabla("Pruebas", ["Prueba", "Pruebas tomadas", "Candidatos"],
+                            [[r["label"], entero(r["value"]), entero(r["candidatos"])] for r in tipos])),
+        seccion("Resultados por prueba (con 5 o más tomas)", [extremos(
+                    [{"label": r["label"], "v": proporcion(r["aprobados"], r["total"])} for r in resultados], "label", "v", pct,
+                    "más aprobada", "menos")],
+                g.columnas(etiquetas(resultados), {"Aprobado": valores(resultados, "aprobados"),
+                                                   "No aprobado": valores(resultados, "reprobados"),
+                                                   "Otro resultado": valores(resultados, "otros")}, apiladas=True,
+                           colores=[g.ESTADO["bien"], g.NEGATIVO, g.EJE]), alto=360,
+                explicacion="Una fracción como 21/27 cuenta como aprobada si llega al 70 sobre 100; si no, se lee el texto "
+                            "del resultado (Apto, Aprobado, No apto...). Lo que no encaja queda como «Otro resultado».",
+                detalle="resultado", ayuda_detalle="Hacé clic en un tramo para ver esas pruebas."),
+        seccion("Evaluados por perfil (top 15)", [],
+                g.columnas(etiquetas(perfiles), {"Con pruebas": valores(perfiles, "con_pruebas"),
+                                                 "Sin pruebas": valores(perfiles, "sin_pruebas")}, apiladas=True,
+                           colores=[g.SERIES[0], g.EJE]), alto=360,
+                explicacion="Candidatos de cada perfil con y sin pruebas.", detalle="perfil",
+                ayuda_detalle="Hacé clic en un tramo para ver esos candidatos."),
+        seccion("Pruebas por año (últimos 5 años)", [],
+                g.lineas([str(r["anio"]) for r in anios], {"Pruebas": valores(anios, "cantidad_pruebas"),
+                                                           "Candidatos": valores(anios, "candidatos_unicos")}),
+                explicacion="Pruebas tomadas y candidatos distintos evaluados en cada año.", detalle="anio",
+                ayuda_detalle="Hacé clic en un año para ver sus pruebas."),
+        seccion("¿Los evaluados llegan más lejos?", [
+                    f"Con pruebas: {pct(valor_exito('Con pruebas', 'pct_asignados'))} fue asignado; "
+                    f"sin pruebas: {pct(valor_exito('Sin pruebas', 'pct_asignados'))}."],
+                g.columnas(["% entrevistados", "% asignados"],
+                           {r["label"]: [num(r["pct_entrevistados"]), num(r["pct_asignados"])] for r in exito},
+                           formato="fmt:pct", rotar=0, colores=[g.SERIES[0], g.EJE]),
+                explicacion="Parte de los candidatos con y sin pruebas que tuvo al menos una entrevista o una asignación. "
+                            "Muestra una relación, no que la prueba cause la asignación."),
+        seccion("Mejores resultados (2 o más pruebas)", [], None,
+                tabla=tabla("Top 20", ["Candidato", "Perfil", "Pruebas", "Aprobadas", "% aprobación"],
+                            [[r["candidato"], r["perfil"], entero(r["total_pruebas"]), entero(r["aprobadas"]),
+                              pct(r["pct_aprobacion"])] for r in top])),
+    ]
+    return {
+        "kpis": [
+            kpi("Total candidatos", entero(total_c)),
+            kpi("Evaluados", entero(evaluados), pct(proporcion(evaluados, total_c))),
+            kpi("Sin evaluar", entero(total_c - evaluados), alerta=total_c > 0 and proporcion(evaluados, total_c) < 20),
+            kpi("Pruebas tomadas", entero(total_p), f"{decimal(total_p / evaluados if evaluados else 0)} por evaluado"),
+            kpi("Aprobación", pct(tasa), f"{entero(aprobadas)} aprobadas", "Fracciones con 70 sobre 100 o más, o texto «Apto» / «Aprobado»."),
+        ],
+        "conclusiones": [
+            f"{pct(proporcion(evaluados, total_c))} de los candidatos rindió alguna prueba.",
+            f"Se aprueba el {pct(tasa)} de las pruebas.",
+            lider(tipos, "label", "value", "pruebas", "las pruebas tomadas"),
+        ],
+        "secciones": secciones,
+        "sugerencias": ["¿Qué prueba se aprueba menos?", "¿Los candidatos con pruebas se asignan más?"],
+        "contexto_ia": {"kpis": k, "tipos": tipos, "resultados": resultados, "exito": exito},
+    }
+
+
+@catalogo.detalle("pruebas")
+def detalle_pruebas(clave, valor, serie, periodo, filtros):
+    if clave in ("rango", "perfil"):
+        if clave == "rango":
+            cond = {"Sin pruebas": "= 0", "1 prueba": "= 1", "2 pruebas": "= 2", "3 pruebas": "= 3"}.get(valor, ">= 4")
+            condicion, params = f"{_CANT_PRUEBAS} {cond}", []
+        else:
+            cond = "> 0" if serie == "Con pruebas" else "= 0"
+            condicion, params = f"RTRIM(pc.PerfilCandidatoDescripcion) = %s AND {_CANT_PRUEBAS} {cond}", [valor]
+        titulo = f"Candidatos · {valor}" + (f" · {serie}" if clave == "perfil" else "")
+        return respuesta_detalle(titulo, s.COLUMNAS_CANDIDATO, s.candidatos(filtros, condicion, params))
+    if clave == "prueba":
+        condicion, params, titulo = "RTRIM(pr.PruebaDescripcion) = %s", [valor], f"Pruebas · {valor}"
+    elif clave == "resultado":
+        condicion, params, titulo = f"RTRIM(pr.PruebaDescripcion) = %s AND {RESULTADO} = %s", [valor, serie], f"{valor} · {serie}"
+    else:
+        condicion, params, titulo = "YEAR(cp.CandidatoPruebaFecha) = %s", [sgo.num(valor)], f"Pruebas de {valor}"
+    return respuesta_detalle(titulo, COLUMNAS_PRUEBA, _pruebas(filtros, condicion, params))
+
+
+# ==========================================================================
+# 9. Check de referencias (can_ref)
+# ==========================================================================
+NIVELES_SEGURIDAD = {"A": "Alto", "M": "Medio", "B": "Bajo", "N": "No enviable"}
+F_NIVEL_SEG = s.Filtro.uno("nivel_seguridad", "Nivel de seguridad", opciones=NIVELES_SEGURIDAD)
+_CASE_NIVEL = ("CASE cr.CheckRefNivelSeguridad " + " ".join(f"WHEN '{k}' THEN '{v}'" for k, v in NIVELES_SEGURIDAD.items())
+               + " ELSE 'Sin clasificar' END")
+_RECON = "UPPER(RTRIM(ISNULL(cr.CheckRefRecontratar, '')))"
+# Palabras del SGO para clasificar la respuesta a «¿lo volvería a contratar?».
+# Se revisan en este orden: primero las afirmativas (incluye frases con «no» como
+# «no habría problema»), después las negativas y por último las dudosas.
+_RECON_SI = ["NO HABRIA PROBLEMA", "NO HABRÍA PROBLEMA", "NO HAY PROBLEMA", "NO TIENE PROBLEMA", "NO TENDRÍA PROBLEMA",
+             "NO TENDRIA PROBLEMA", "NO HABRIA INCONVENIENTE", "NO HABRÍA INCONVENIENTE", "SIN PROBLEMA", "SIN DUDA",
+             "SIN INCONVENIENTE", "POR SUPUESTO", "CLARO", "DEFINITIVAMENTE", "ABSOLUTAMENTE", "TOTALMENTE",
+             "PARA RECOMENDAR", "RECOMENDABLE", "RECOMIENDO", "RECOMENDARIA", "RECOMENDARÍA", "VOLVER A CONTRAT",
+             "VOLVERIA A CONTRAT", "VOLVERÍAMOS A CONTRAT", "VOLVERIAMOS A CONTRAT", "NO DUDARIA", "NO DUDARÍA",
+             "NO LO DUDAR", "BUEN TRABAJO", "EXCELENTE TRABAJO", "MUY BUEN", "RE CONTENT", "MUY CONTENT", "ENCANTADO",
+             "CONFORME", "SATISFECHO", "FELIZ", "EXCELENTE PERSONA", "EXCELENTE EMPLEADO", "EXCELENTE COMPAÑERO",
+             "GRAN TRABAJADOR", "MUY RESPONSABLE", "MUY PROFESIONAL", "NUNCA TUVIMOS QUEJA", "SIN QUEJA",
+             "QUEDARON CONTENT", "NO QUERIAN QUE SE FUERA", "NO QUERÍAN QUE SE FUERA", "ESTARÍAN CONTENT",
+             "ESTARIAN CONTENT", "SI", "SÍ", "YES", "AFIRMATIV", "POSITIV"]
+_RECON_NO = ["NO", "NEGATIV"]
+_RECON_TALVEZ = ["TAL VEZ", "DEPENDE", "QUIZAS", "QUIZÁS", "POSIBLE"]
+_RECON_ORDEN = ["Sí recontrataría", "No recontrataría", "Tal vez", "Sin dato"]
+
+
+def _alguna(palabras):
+    return " OR ".join(f"CHARINDEX(N'{w}', {_RECON}) > 0" for w in palabras)
+
+
+RECONTRATAR = (f"CASE WHEN {_alguna(_RECON_SI)} THEN 'Sí recontrataría' WHEN {_alguna(_RECON_NO)} THEN 'No recontrataría' "
+               f"WHEN {_alguna(_RECON_TALVEZ)} THEN 'Tal vez' ELSE 'Sin dato' END")
+_ANTIG = "(cr.CheckRefAnioEgreso - cr.CheckRefAnioIngreso)"
+_RANGOS_ANTIG = [("Menos de 1 año", f"{_ANTIG} < 1"), ("1-2 años", f"{_ANTIG} BETWEEN 1 AND 2"),
+                 ("3-5 años", f"{_ANTIG} BETWEEN 3 AND 5"), ("6-10 años", f"{_ANTIG} BETWEEN 6 AND 10"),
+                 ("Más de 10 años", f"{_ANTIG} > 10")]
+_ANTIG_VALIDA = "cr.CheckRefAnioEgreso > 0 AND cr.CheckRefAnioIngreso > 0 AND cr.CheckRefAnioEgreso >= cr.CheckRefAnioIngreso"
+COLUMNAS_REF = ["Candidato Id", "Candidato", "Perfil", "Empresa", "Cargo", "¿Lo recontrataría?", "Nivel de seguridad", "Fecha"]
+_DESDE_REF = "FROM dbo.CandidatoCheckReferencias cr INNER JOIN dbo.Candidatos c ON cr.CandidatoId = c.CandidatoId"
+
+
+def _where_ref(filtros):
+    w, p = where(filtros)
+    if filtros.get("nivel_seguridad"):
+        w += " AND cr.CheckRefNivelSeguridad = %s"
+        p = p + [filtros["nivel_seguridad"]]
+    if filtros.get("psicologo_id") is not None:
+        w += " AND cr.CheckRefPsicologoId = %s"
+        p = p + [filtros["psicologo_id"]]
+    return w, p
+
+
+def _referencias(filtros, condicion="1=1", params=None):
+    w, p = _where_ref(filtros)
+    return sgo.filas(f"""
+        SELECT TOP 500 c.CandidatoId, {NOMBRE} AS candidato, RTRIM(pc.PerfilCandidatoDescripcion) AS perfil,
+               RTRIM(cr.CheckRefEmpresa) AS empresa, RTRIM(cr.CheckRefCargoOcupado) AS cargo,
+               RTRIM(cr.CheckRefRecontratar) AS recontratar, {_CASE_NIVEL} AS nivel_seguridad, cr.CheckRefFecha AS fecha
+        {_DESDE_REF} LEFT JOIN dbo.PerfilesCandidatos pc ON c.PerfilCandidatoId = pc.PerfilCandidatoId
+        LEFT JOIN dbo.Psicologos ps ON cr.CheckRefPsicologoId = ps.PsicologoId
+        WHERE {w} AND ({condicion}) ORDER BY cr.CheckRefFecha DESC""", p + list(params or []))
+
+
+@catalogo.registrar(
+    "referencias", "Check de referencias",
+    "Referencias laborales chequeadas: nivel de seguridad, empresas y motivos de egreso, si los recontratarían y quién las chequea.",
+    usa_periodo=False, icono="bi-telephone-inbound",
+    filtros=[s.F_PERFIL, s.F_PAIS, s.F_DEPTO, F_NIVEL_SEG, s.F_PSICOLOGO],
+)
+def referencias(periodo, filtros):
+    w, p = where(filtros)
+    wr, pr = _where_ref(filtros)
+    filtra_ref = bool(filtros.get("nivel_seguridad") or filtros.get("psicologo_id") is not None)
+    base = (f"(SELECT COUNT(DISTINCT cr.CandidatoId) {_DESDE_REF} WHERE {wr})", pr) if filtra_ref else \
+           (f"(SELECT COUNT(*) FROM dbo.Candidatos c WHERE {w})", p)
+    k = sgo.fila(f"""
+        SELECT {base[0]} AS total_candidatos,
+               (SELECT COUNT(DISTINCT cr.CandidatoId) {_DESDE_REF} WHERE {wr}) AS con_referencias,
+               (SELECT COUNT(*) {_DESDE_REF} WHERE {wr}) AS total_referencias,
+               (SELECT COUNT(DISTINCT cr.CheckRefPsicologoId) {_DESDE_REF} WHERE {wr}) AS psicologos_activos,
+               (SELECT COUNT(*) {_DESDE_REF} WHERE {wr} AND YEAR(cr.CheckRefFecha) = YEAR(GETDATE())) AS referencias_este_anio""",
+                 base[1] + pr * 4)
+    niveles = sgo.filas(f"SELECT {_CASE_NIVEL} AS label, COUNT(*) AS value {_DESDE_REF} WHERE {wr} GROUP BY {_CASE_NIVEL}", pr)
+    niveles = _orden(niveles, list(NIVELES_SEGURIDAD.values()) + ["Sin clasificar"])
+    empresas = sgo.filas(f"""SELECT TOP 15 RTRIM(cr.CheckRefEmpresa) AS label, COUNT(*) AS value, COUNT(DISTINCT cr.CandidatoId) AS candidatos
+                             {_DESDE_REF} WHERE {wr} AND RTRIM(cr.CheckRefEmpresa) != '' GROUP BY RTRIM(cr.CheckRefEmpresa)
+                             ORDER BY value DESC""", pr)
+    motivos = sgo.filas(f"""SELECT TOP 10 RTRIM(cr.CheckRefMotivoEgreso) AS label, COUNT(*) AS value
+                            {_DESDE_REF} WHERE {wr} AND RTRIM(cr.CheckRefMotivoEgreso) != '' GROUP BY RTRIM(cr.CheckRefMotivoEgreso)
+                            ORDER BY value DESC""", pr)
+    recon = _orden(sgo.filas(f"SELECT {RECONTRATAR} AS label, COUNT(*) AS value {_DESDE_REF} WHERE {wr} GROUP BY {RECONTRATAR}", pr),
+                   _RECON_ORDEN)
+    psicologos = sgo.filas(f"""
+        SELECT TOP 15 RTRIM(ps.PsicologoNombre) + ' ' + RTRIM(ps.PsicologoApellido) AS label, COUNT(*) AS value,
+               COUNT(DISTINCT cr.CandidatoId) AS candidatos
+        {_DESDE_REF} INNER JOIN dbo.Psicologos ps ON cr.CheckRefPsicologoId = ps.PsicologoId
+        WHERE {wr} GROUP BY ps.PsicologoId, ps.PsicologoNombre, ps.PsicologoApellido ORDER BY value DESC""", pr)
+    anios = sgo.filas(f"""
+        SELECT YEAR(cr.CheckRefFecha) AS anio, COUNT(*) AS cantidad_referencias, COUNT(DISTINCT cr.CandidatoId) AS candidatos_unicos
+        {_DESDE_REF} WHERE {wr} AND cr.CheckRefFecha > '1900-01-01'
+        GROUP BY YEAR(cr.CheckRefFecha) HAVING YEAR(cr.CheckRefFecha) >= YEAR(GETDATE()) - 5 ORDER BY anio""", pr)
+    case_a = "CASE " + " ".join(f"WHEN {c} THEN '{e}'" for e, c in _RANGOS_ANTIG) + " END"
+    antig = _orden(sgo.filas(f"""SELECT {case_a} AS label, COUNT(*) AS value {_DESDE_REF}
+                                 WHERE {wr} AND {_ANTIG_VALIDA} GROUP BY {case_a}""", pr), [e for e, _ in _RANGOS_ANTIG])
+
+    total_c, con_ref, total_r = num(k.get("total_candidatos")), num(k.get("con_referencias")), num(k.get("total_referencias"))
+    con_ref = min(con_ref, total_c)
+    si = next((num(r["value"]) for r in recon if r["label"] == "Sí recontrataría"), 0)
+    no_env = next((num(r["value"]) for r in niveles if r["label"] == "No enviable"), 0)
+    colores_nivel = {"Alto": g.ESTADO["bien"], "Medio": g.ESTADO["atencion"], "Bajo": g.ESTADO["serio"],
+                     "No enviable": g.ESTADO["critico"], "Sin clasificar": g.EJE}
+    colores_recon = {"Sí recontrataría": g.ESTADO["bien"], "No recontrataría": g.ESTADO["critico"], "Tal vez": g.ESTADO["atencion"],
+                     "Sin dato": g.EJE}
+    secciones = [
+        seccion("Nivel de seguridad", [lider(niveles, "label", "value", "referencias")],
+                g.torta([(r["label"], num(r["value"])) for r in niveles], colores=[colores_nivel.get(r["label"]) for r in niveles]),
+                explicacion="Nivel de seguridad que el psicólogo le dio a cada referencia: Alto, Medio, Bajo o No enviable.",
+                detalle="nivel", ayuda_detalle="Hacé clic en una porción para ver esas referencias."),
+        seccion("¿Lo volverían a contratar?", [f"{pct(proporcion(si, total_r))} de las referencias lo recontrataría."],
+                g.torta([(r["label"], num(r["value"])) for r in recon], colores=[colores_recon.get(r["label"]) for r in recon]),
+                explicacion="Se clasifica el texto de la respuesta con las mismas palabras que el SGO («sin problema», «por supuesto», "
+                            "«sí» → Sí; «no» → No; «tal vez», «depende» → Tal vez). Es una lectura automática del texto.",
+                detalle="recontratar", ayuda_detalle="Hacé clic en una porción para ver esas respuestas."),
+        seccion("Empresas más consultadas (top 15)", [lider(empresas, "label", "value", "referencias")],
+                g.ranking(etiquetas(empresas), valores(empresas, "value"), "Referencias", g.SERIES[1]), alto=g.alto_ranking(len(empresas)),
+                explicacion="Empresas anteriores de los candidatos donde más referencias se pidieron.", detalle="empresa",
+                ayuda_detalle="Hacé clic en una empresa para ver esas referencias."),
+        seccion("Motivos de egreso (top 10)", [lider(motivos, "label", "value", "referencias")],
+                g.ranking(etiquetas(motivos), valores(motivos, "value"), "Referencias", g.SERIES[3]), alto=g.alto_ranking(len(motivos)),
+                explicacion="Motivo por el que el candidato dejó el trabajo anterior, según la referencia.", detalle="motivo",
+                ayuda_detalle="Hacé clic en un motivo para ver esas referencias."),
+        seccion("Referencias por psicólogo (top 15)", [lider(psicologos, "label", "value", "referencias")],
+                g.ranking(etiquetas(psicologos), valores(psicologos, "value"), "Referencias", g.SERIES[2]),
+                alto=g.alto_ranking(len(psicologos)), explicacion="Quién chequeó las referencias.", detalle="psicologo",
+                ayuda_detalle="Hacé clic en un psicólogo para ver sus referencias."),
+        seccion("Referencias por año (últimos 5 años)", [],
+                g.lineas([str(r["anio"]) for r in anios], {"Referencias": valores(anios, "cantidad_referencias"),
+                                                           "Candidatos": valores(anios, "candidatos_unicos")}),
+                explicacion="Referencias chequeadas y candidatos distintos en cada año.", detalle="anio",
+                ayuda_detalle="Hacé clic en un año para ver sus referencias."),
+        seccion("Antigüedad en el trabajo anterior", [lider(antig, "label", "value", "referencias")],
+                g.columnas(etiquetas(antig), {"Referencias": valores(antig, "value")}, rotar=0, colores=[g.SERIES[6]]),
+                explicacion="Años entre el ingreso y el egreso declarados en la referencia (solo las que tienen los dos años).",
+                detalle="antiguedad", ayuda_detalle="Hacé clic en un rango para ver esas referencias."),
+    ]
+    return {
+        "kpis": [
+            kpi("Total candidatos", entero(total_c)),
+            kpi("Con referencias", entero(con_ref), pct(proporcion(con_ref, total_c))),
+            kpi("Sin referencias", entero(max(total_c - con_ref, 0))),
+            kpi("Referencias chequeadas", entero(total_r), f"{decimal(total_r / con_ref if con_ref else 0)} por candidato"),
+            kpi("Este año", entero(k.get("referencias_este_anio"))),
+            kpi("Psicólogos", entero(k.get("psicologos_activos")), "que chequearon"),
+        ],
+        "conclusiones": [
+            f"{pct(proporcion(con_ref, total_c))} de los candidatos tiene referencias chequeadas.",
+            f"{pct(proporcion(si, total_r))} de las referencias lo volvería a contratar.",
+            f"{entero(no_env)} referencias quedaron como «No enviable»." if no_env else "",
+        ],
+        "secciones": secciones,
+        "sugerencias": ["¿Cuántas referencias son no enviables?", "¿Cuáles son los motivos de egreso más comunes?"],
+        "contexto_ia": {"kpis": k, "niveles": niveles, "recontratar": recon, "motivos": motivos},
+    }
+
+
+@catalogo.detalle("referencias")
+def detalle_referencias(clave, valor, serie, periodo, filtros):
+    params = [valor]
+    if clave == "nivel":
+        condicion = f"{_CASE_NIVEL} = %s"
+    elif clave == "recontratar":
+        condicion = f"{RECONTRATAR} = %s"
+    elif clave == "empresa":
+        condicion = "RTRIM(cr.CheckRefEmpresa) = %s"
+    elif clave == "motivo":
+        condicion = "RTRIM(cr.CheckRefMotivoEgreso) = %s"
+    elif clave == "psicologo":
+        condicion = "RTRIM(ps.PsicologoNombre) + ' ' + RTRIM(ps.PsicologoApellido) = %s"
+    elif clave == "anio":
+        condicion, params = "YEAR(cr.CheckRefFecha) = %s", [num(valor)]
+    else:
+        condicion, params = f"{_ANTIG_VALIDA} AND " + next((c for e, c in _RANGOS_ANTIG if e == valor), "1=0"), []
+    return respuesta_detalle(f"Referencias · {valor}", COLUMNAS_REF, _referencias(filtros, condicion, params))
+
+
+# ==========================================================================
+# 10. Desempeño en asignaciones (canins)
+# ==========================================================================
+F_CLIENTE_ASIG = s.Filtro.uno("cliente_id", "Cliente", "ClientesConAsignaciones")
+F_ANIO_DESDE = s.Filtro.uno("anio_desde", "Desde el año", "AniosAsignaciones")
+F_ANIO_HASTA = s.Filtro.uno("anio_hasta", "Hasta el año", "AniosAsignaciones")
+ORDEN_RANKING = {"asignaciones": "Más asignaciones", "desempeno": "Mejor desempeño", "recomendacion": "Más recontratados",
+                 "duracion": "Asignaciones más largas"}
+F_ORDEN = s.Filtro.fijo("ordenar_por", "Ranking por", ORDEN_RANKING, "asignaciones")
+_ORDEN_SQL = {"asignaciones": "total_asignaciones DESC", "desempeno": "desempeno_promedio DESC",
+              "recomendacion": "pct_volver_contratar DESC", "duracion": "duracion_promedio DESC"}
+_DURACION = "DATEDIFF(DAY, a.AsignacionFechaIngreso, ISNULL(a.AsignacionFechaEgreso, GETDATE()))"
+_DESDE_ASIG = "FROM dbo.Asignaciones a INNER JOIN dbo.Pedidos p ON a.PedidoId = p.PedidoId"
+# Escalas de evaluación de la asignación tal como las usa el SGO.
+_DESEMPENO = [("Excelente", "d >= 4.5"), ("Muy bueno", "d >= 3.5 AND d < 4.5"), ("Bueno", "d >= 2.5 AND d < 3.5"),
+              ("Regular", "d >= 1.5 AND d < 2.5"), ("Deficiente", "d >= 0.5 AND d < 1.5"), ("Sin calificar", "d < 0.5")]
+_CALIDAD = [("Excelente", "a.AsignacionCalidadTrabajo = 'E'"), ("Muy bueno", "a.AsignacionCalidadTrabajo = 'M'"),
+            ("Bueno", "a.AsignacionCalidadTrabajo = 'B'"), ("Regular", "a.AsignacionCalidadTrabajo = 'R'"),
+            ("Deficiente", "a.AsignacionCalidadTrabajo = 'D'"),
+            ("Sin calificar", "(a.AsignacionCalidadTrabajo = 'N' OR a.AsignacionCalidadTrabajo IS NULL)")]
+_EXPERIENCIA = [("1 asignación", "n = 1"), ("2 a 5", "n BETWEEN 2 AND 5"), ("6 a 10", "n BETWEEN 6 AND 10"), ("Más de 10", "n > 10")]
+COLUMNAS_ASIG = ["Asignación", "Pedido", "Candidato", "Cliente", "Ingreso", "Egreso", "Días", "Estado", "Causal de baja", "Desempeño"]
+
+
+def _where_asig(filtros, a="a", p_="p"):
+    condiciones, params = ["1=1"], []
+    if filtros.get("cliente_id") is not None:
+        condiciones.append(f"{p_}.ClienteId = %s")
+        params.append(filtros["cliente_id"])
+    if filtros.get("anio_desde") is not None:
+        condiciones.append(f"YEAR({a}.AsignacionFechaIngreso) >= %s")
+        params.append(filtros["anio_desde"])
+    if filtros.get("anio_hasta") is not None:
+        condiciones.append(f"YEAR({a}.AsignacionFechaIngreso) <= %s")
+        params.append(filtros["anio_hasta"])
+    return " AND ".join(condiciones), params
+
+
+def _asignaciones(filtros, condicion="1=1", params=None):
+    w, p = _where_asig(filtros)
+    return sgo.filas(f"""
+        SELECT TOP 500 a.AsignacionId, a.PedidoId, {NOMBRE} AS candidato, RTRIM(cl.ClienteNombre) AS cliente,
+               a.AsignacionFechaIngreso AS ingreso, a.AsignacionFechaEgreso AS egreso, {_DURACION} AS dias,
+               RTRIM(ea.EstadoAsignacionDescripcion) AS estado, RTRIM(cb.CausalBajaDescripcion) AS causal,
+               a.AsignacionDesempenoNum AS desempeno
+        {_DESDE_ASIG} INNER JOIN dbo.Clientes cl ON p.ClienteId = cl.ClienteId
+        LEFT JOIN dbo.Candidatos c ON a.CandidatoId = c.CandidatoId
+        LEFT JOIN dbo.EstadosAsignacion ea ON a.EstadoAsignacionId = ea.EstadoAsignacionId
+        LEFT JOIN dbo.CausalesBaja cb ON a.CausalBajaId = cb.CausalBajaId
+        LEFT JOIN dbo.FormasPago fp ON a.FormaPagoId = fp.FormaPagoId
+        WHERE {w} AND ({condicion}) ORDER BY a.AsignacionFechaIngreso DESC""", p + list(params or []))
+
+
+_POR_CANDIDATO = f"""SELECT a.CandidatoId, COUNT(*) AS n, AVG(CAST(a.AsignacionDesempenoNum AS FLOAT)) AS d,
+               SUM(CASE WHEN a.AsignacionVolverContratar = 'S' THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0) AS recontratar,
+               COUNT(CASE WHEN a.CausalBajaId IS NOT NULL THEN 1 END) AS bajas, AVG({_DURACION}) AS duracion
+        {_DESDE_ASIG} WHERE {{w}} GROUP BY a.CandidatoId"""
+
+
+@catalogo.registrar(
+    "desempeno-asignaciones", "Desempeño en asignaciones",
+    "Cómo trabajan los candidatos asignados: cuántas asignaciones tienen, desempeño, calidad, rotación, bajas e incorporaciones.",
+    usa_periodo=False, icono="bi-award", filtros=[F_CLIENTE_ASIG, F_ANIO_DESDE, F_ANIO_HASTA, F_ORDEN],
+)
+def desempeno_asignaciones(periodo, filtros):
+    w, p = _where_asig(filtros)
+    por_cand = _POR_CANDIDATO.format(w=w)
+    k = sgo.fila(f"""
+        SELECT COUNT(*) AS total_candidatos, SUM(n) AS total_asignaciones, AVG(CAST(n AS FLOAT)) AS asignaciones_por_candidato,
+               AVG(d) AS desempeno_general, AVG(recontratar) AS pct_volver_contratar, SUM(bajas) AS total_bajas,
+               AVG(duracion) AS duracion_promedio,
+               {", ".join(f"COUNT(CASE WHEN {c} THEN 1 END) AS [{e}]" for e, c in _EXPERIENCIA)}
+        FROM ({por_cand}) x""", p)
+    rot = sgo.fila(f"""
+        SELECT COUNT(*) AS total_asignaciones, COUNT(CASE WHEN {_DURACION} < 30 THEN 1 END) AS menos_1_mes,
+               COUNT(CASE WHEN {_DURACION} >= 180 THEN 1 END) AS mas_6_meses,
+               COUNT(CASE WHEN a.AsignacionFechaEgreso IS NULL THEN 1 END) AS activas
+        {_DESDE_ASIG} WHERE {w}""", p)
+    dsem = sgo.fila(f"""SELECT {", ".join(f"COUNT(CASE WHEN {c} THEN 1 END) AS [{e}]" for e, c in _DESEMPENO)}
+                        FROM (SELECT a.CandidatoId, AVG(CAST(a.AsignacionDesempenoNum AS FLOAT)) AS d {_DESDE_ASIG}
+                              WHERE {w} AND a.AsignacionDesempenoNum IS NOT NULL GROUP BY a.CandidatoId) x""", p)
+    calidad = sgo.fila(f"SELECT {', '.join(f'COUNT(CASE WHEN {c} THEN 1 END) AS [{e}]' for e, c in _CALIDAD)} {_DESDE_ASIG} WHERE {w}", p)
+    formas = sgo.filas(f"""SELECT ISNULL(RTRIM(fp.FormaPagoDescripcion), 'Sin forma de pago') AS label, COUNT(*) AS value
+                           {_DESDE_ASIG} LEFT JOIN dbo.FormasPago fp ON a.FormaPagoId = fp.FormaPagoId
+                           WHERE {w} GROUP BY fp.FormaPagoId, fp.FormaPagoDescripcion ORDER BY value DESC""", p)
+    causales = sgo.filas(f"""SELECT TOP 10 RTRIM(cb.CausalBajaDescripcion) AS label, COUNT(*) AS value,
+                                    COUNT(DISTINCT a.CandidatoId) AS candidatos
+                             {_DESDE_ASIG} INNER JOIN dbo.CausalesBaja cb ON a.CausalBajaId = cb.CausalBajaId
+                             WHERE {w} GROUP BY cb.CausalBajaId, cb.CausalBajaDescripcion ORDER BY value DESC""", p)
+    wc, pc_ = _where_asig({"cliente_id": filtros.get("cliente_id")})
+    tendencia = sgo.filas(f"""
+        SELECT YEAR(primera) AS anio, MONTH(primera) AS mes, COUNT(*) AS nuevos FROM (
+            SELECT a.CandidatoId, MIN(a.AsignacionFechaIngreso) AS primera {_DESDE_ASIG}
+            WHERE {wc} GROUP BY a.CandidatoId) x
+        WHERE primera >= DATEADD(YEAR, -3, GETDATE()) GROUP BY YEAR(primera), MONTH(primera) ORDER BY anio, mes""", pc_)
+    orden = _ORDEN_SQL.get(filtros.get("ordenar_por"), _ORDEN_SQL["asignaciones"])
+    ranking = sgo.filas(f"""
+        SELECT TOP 20 a.CandidatoId, {NOMBRE} AS candidato, COUNT(*) AS total_asignaciones,
+               COUNT(CASE WHEN a.AsignacionFechaEgreso IS NULL THEN 1 END) AS activas,
+               ROUND(AVG(CAST(a.AsignacionDesempenoNum AS FLOAT)), 2) AS desempeno_promedio,
+               ROUND(SUM(CASE WHEN a.AsignacionVolverContratar = 'S' THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0), 1) AS pct_volver_contratar,
+               AVG({_DURACION}) AS duracion_promedio, COUNT(CASE WHEN a.CausalBajaId IS NOT NULL THEN 1 END) AS bajas,
+               COUNT(DISTINCT p.ClienteId) AS clientes
+        {_DESDE_ASIG} LEFT JOIN dbo.Candidatos c ON a.CandidatoId = c.CandidatoId
+        WHERE {w} GROUP BY a.CandidatoId, c.CandidatoNombre, c.CandidatoApellido ORDER BY {orden}""", p)
+
+    total_a = num(rot.get("total_asignaciones"))
+    experiencia = [{"label": e, "value": num(k.get(e))} for e, _ in _EXPERIENCIA]
+    desempeno = [{"label": e, "value": num(dsem.get(e))} for e, _ in _DESEMPENO]
+    calidades = [{"label": e, "value": num(calidad.get(e))} for e, _ in _CALIDAD]
+    meses = [f"{int(num(r['mes'])):02d}/{int(num(r['anio']))}" for r in tendencia]
+    escala = [g.ESTADO["bien"], "#7cc47c", g.SERIES[0], g.ESTADO["atencion"], g.ESTADO["critico"], g.EJE]
+    secciones = [
+        seccion("Candidatos según cantidad de asignaciones", [lider(experiencia, "label", "value", "candidatos")],
+                g.columnas(etiquetas(experiencia), {"Candidatos": valores(experiencia, "value")}, rotar=0),
+                explicacion="Cuántas asignaciones tuvo cada candidato en el período y cliente elegidos.", detalle="experiencia",
+                ayuda_detalle="Hacé clic en una barra para ver esos candidatos."),
+        seccion("Desempeño promedio por candidato", [lider(desempeno, "label", "value", "candidatos")],
+                g.torta([(r["label"], r["value"]) for r in desempeno], colores=escala),
+                explicacion="Promedio de la nota de desempeño (0 a 5) de las asignaciones de cada candidato: "
+                            "4,5 o más es Excelente; menos de 0,5, Sin calificar.", detalle="desempeno",
+                ayuda_detalle="Hacé clic en una porción para ver esos candidatos."),
+        seccion("Calidad del trabajo", [lider(calidades, "label", "value", "asignaciones")],
+                g.columnas(etiquetas(calidades), {"Asignaciones": valores(calidades, "value")}, rotar=0, colores=[g.SERIES[2]]),
+                explicacion="Calidad del trabajo registrada en cada asignación.", detalle="calidad",
+                ayuda_detalle="Hacé clic en una barra para ver esas asignaciones."),
+        seccion("Formas de pago", [lider(formas, "label", "value", "asignaciones"), concentracion(formas, "value", 2, "asignaciones")],
+                g.ranking(etiquetas(formas), valores(formas, "value"), "Asignaciones", g.SERIES[1]), alto=g.alto_ranking(len(formas), 200),
+                explicacion="Forma de pago de cada asignación.", detalle="forma_pago",
+                ayuda_detalle="Hacé clic en una forma de pago para ver esas asignaciones."),
+        seccion("Causales de baja (top 10)", [lider(causales, "label", "value", "bajas")],
+                g.ranking(etiquetas(causales), valores(causales, "value"), "Bajas", g.NEGATIVO), alto=g.alto_ranking(len(causales)),
+                explicacion="Motivo de las asignaciones que terminaron con una causal de baja.", detalle="causal",
+                ayuda_detalle="Hacé clic en una causal para ver esas asignaciones."),
+        seccion("Incorporaciones de candidatos nuevos (últimos 3 años)", [],
+                g.lineas(meses, {"Candidatos nuevos": valores(tendencia, "nuevos")}, area=True),
+                explicacion="Candidatos cuya primera asignación cayó en cada mes. Solo usa el filtro de cliente.", detalle="incorporacion",
+                ayuda_detalle="Hacé clic en un mes para ver esos candidatos."),
+        seccion("Ranking de candidatos (top 20)", [f"Ordenado por: {ORDEN_RANKING.get(filtros.get('ordenar_por'), ORDEN_RANKING['asignaciones']).lower()}."],
+                None, tabla=tabla("Top 20", ["Candidato", "Asignaciones", "Activas", "Desempeño", "% recontratar", "Días promedio",
+                                             "Bajas", "Clientes"],
+                                  [[r["candidato"], entero(r["total_asignaciones"]), entero(r["activas"]), decimal(r["desempeno_promedio"], 2),
+                                    pct(r["pct_volver_contratar"]), entero(r["duracion_promedio"]), entero(r["bajas"]),
+                                    entero(r["clientes"])] for r in ranking])),
+    ]
+    return {
+        "kpis": [
+            kpi("Candidatos asignados", entero(k.get("total_candidatos"))),
+            kpi("Asignaciones", entero(k.get("total_asignaciones")), f"{decimal(k.get('asignaciones_por_candidato'))} por candidato"),
+            kpi("Desempeño promedio", decimal(k.get("desempeno_general"), 2), "de 0 a 5"),
+            kpi("Lo recontratarían", pct(k.get("pct_volver_contratar")), "promedio por candidato"),
+            kpi("Duración promedio", f"{entero(k.get('duracion_promedio'))} días"),
+            kpi("Menos de 1 mes", pct(proporcion(rot.get("menos_1_mes"), total_a)), f"{entero(rot.get('menos_1_mes'))} asignaciones",
+                alerta=proporcion(rot.get("menos_1_mes"), total_a) > 20),
+            kpi("Más de 6 meses", pct(proporcion(rot.get("mas_6_meses"), total_a)), f"{entero(rot.get('mas_6_meses'))} asignaciones"),
+            kpi("Bajas", entero(k.get("total_bajas"))),
+        ],
+        "conclusiones": [
+            f"El desempeño promedio es {decimal(k.get('desempeno_general'), 2)} sobre 5.",
+            f"{pct(proporcion(rot.get('menos_1_mes'), total_a))} de las asignaciones dura menos de un mes.",
+            lider(causales, "label", "value", "bajas", "las bajas"),
+        ],
+        "secciones": secciones,
+        "sugerencias": ["¿Cuál es la causa de baja más común?", "¿Cuántas asignaciones duran menos de un mes?"],
+        "contexto_ia": {"kpis": k, "rotacion": rot, "desempeno": desempeno, "calidad": calidades, "causales": causales},
+    }
+
+
+@catalogo.detalle("desempeno-asignaciones")
+def detalle_desempeno_asignaciones(clave, valor, serie, periodo, filtros):
+    w, p = _where_asig(filtros)
+    if clave in ("experiencia", "desempeno", "incorporacion"):
+        if clave == "experiencia":
+            cond = next((c for e, c in _EXPERIENCIA if e == valor), "1=0")
+            sub, params = f"SELECT CandidatoId FROM ({_POR_CANDIDATO.format(w=w)}) x WHERE {cond}", p
+        elif clave == "desempeno":
+            cond = next((c for e, c in _DESEMPENO if e == valor), "1=0")
+            sub = (f"SELECT CandidatoId FROM (SELECT a.CandidatoId, AVG(CAST(a.AsignacionDesempenoNum AS FLOAT)) AS d {_DESDE_ASIG} "
+                   f"WHERE {w} AND a.AsignacionDesempenoNum IS NOT NULL GROUP BY a.CandidatoId) x WHERE {cond}")
+            params = p
+        else:
+            mes, _, anio = str(valor).partition("/")
+            wc, pc_ = _where_asig({"cliente_id": filtros.get("cliente_id")})
+            sub = (f"SELECT CandidatoId FROM (SELECT a.CandidatoId, MIN(a.AsignacionFechaIngreso) AS primera {_DESDE_ASIG} "
+                   f"WHERE {wc} GROUP BY a.CandidatoId) x WHERE YEAR(primera) = %s AND MONTH(primera) = %s")
+            params = pc_ + [num(anio), num(mes)]
+        return respuesta_detalle(f"Candidatos · {valor}", s.COLUMNAS_CANDIDATO,
+                                 s.candidatos({}, f"c.CandidatoId IN ({sub})", params))
+    params = [valor]
+    if clave == "calidad":
+        condicion, params = next((c for e, c in _CALIDAD if e == valor), "1=0"), []
+    elif clave == "forma_pago":
+        condicion = "ISNULL(RTRIM(fp.FormaPagoDescripcion), 'Sin forma de pago') = %s"
+    else:
+        condicion = "RTRIM(cb.CausalBajaDescripcion) = %s"
+    return respuesta_detalle(f"Asignaciones · {valor}", COLUMNAS_ASIG, _asignaciones(filtros, condicion, params))
+
+
+# ==========================================================================
+# 11. Búsqueda de candidatos (can_det)
+# ==========================================================================
+_SI_NO = {"si": "Sí", "no": "No"}
+F_BUSQUEDA = s.Filtro.texto("busqueda", "Nombre, apellido o documento")
+FILTROS_BUSQUEDA = [
+    F_BUSQUEDA, s.F_PERFIL, s.F_PAIS, s.F_DEPTO, s.F_NIVEL, s.F_SEXO,
+    s.Filtro.uno("estado_civil_id", "Estado civil", "EstadosCiviles"),
+    s.Filtro.uno("rango_edad", "Edad", opciones={"18-25": "18 a 25", "26-35": "26 a 35", "36-45": "36 a 45", "46-55": "46 a 55", "56+": "56 o más"}),
+    s.Filtro.uno("rango_salario", "Salario pretendido", opciones={"0-20k": "Menos de $20 mil", "20-40k": "$20 a $40 mil",
+                                                                  "40-60k": "$40 a $60 mil", "60-80k": "$60 a $80 mil", "80k+": "$80 mil o más"}),
+    s.F_LIBRETA, s.Filtro.uno("categoria_libreta_id", "Categoría de libreta", "CategoriasLibretaConducir"),
+    s.Filtro.uno("disponibilidad_horaria", "Disponibilidad horaria", opciones=_SI_NO),
+    s.Filtro.uno("horario_rotativo", "Horario rotativo", opciones=_SI_NO),
+    s.Filtro.uno("zafrales", "Acepta zafrales", opciones=_SI_NO),
+    s.F_ASIGNABLE,
+    s.Filtro.uno("carnet_vigente", "Carné de salud vigente", opciones=_SI_NO),
+    s.Filtro.uno("con_email", "Tiene email", opciones=_SI_NO),
+    s.Filtro.uno("con_celular", "Tiene celular", opciones=_SI_NO),
+    s.Filtro.uno("cantidad_entrevistas", "Entrevistas", opciones={"0": "Ninguna", "1-2": "1 o 2", "3-5": "3 a 5", "6-10": "6 a 10",
+                                                                  "10+": "Más de 10"}),
+    s.Filtro.uno("entrevista_reciente", "Entrevistado en los últimos", opciones={"30": "30 días", "90": "90 días", "180": "180 días",
+                                                                                 "365": "365 días"}),
+    s.Filtro.uno("calificacion", "Calificación en entrevistas", opciones={"excelente": "Excelente (más de 8)", "bueno": "Bueno (6 a 8)",
+                                                                          "regular": "Regular (menos de 6)"}),
+    s.Filtro.uno("cliente_id", "Entrevistado para el cliente", "ClientesConEntrevistas"),
+    s.Filtro.uno("tiene_asignaciones", "Trabajó (en ese cliente si se eligió)", opciones=_SI_NO),
+    s.Filtro.fijo("orden", "Ordenar por", {"apellido": "Apellido", "edad": "Más jóvenes", "perfil": "Perfil",
+                                          "salario": "Salario pretendido", "entrevistas": "Más entrevistas"}, "apellido"),
+]
+_N_ENTREVISTAS = "(SELECT COUNT(*) FROM dbo.Entrevistas e WHERE e.CandidatoId = c.CandidatoId)"
+_CALIF = ("(SELECT AVG(CAST(e.EntrevistaPuntajeFormacion AS FLOAT) + CAST(e.EntrevistaPuntajeExperiencia AS FLOAT)) "
+          "FROM dbo.Entrevistas e WHERE e.CandidatoId = c.CandidatoId)")
+_SI_NO_COL = {"disponibilidad_horaria": "CandidatoDisponibilidadHoraria", "horario_rotativo": "CandidatoHorarioRotativo",
+              "zafrales": "CandidatoZafrales"}
+
+
+def _trabajo_en_cliente(cliente):
+    """Trabajó = tiene una asignación o su último evento en el pedido es alta (11 o 12), como en el SGO."""
+    cli_a = " AND p.ClienteId = %s" if cliente is not None else ""
+    join_a = "INNER JOIN dbo.Pedidos p ON a.PedidoId = p.PedidoId" if cliente is not None else ""
+    join_pp = "INNER JOIN dbo.Pedidos p ON pp.PedidoId = p.PedidoId" if cliente is not None else ""
+    sql = f"""(EXISTS (SELECT 1 FROM dbo.Asignaciones a {join_a} WHERE a.CandidatoId = c.CandidatoId{cli_a})
+        OR EXISTS (SELECT 1 FROM dbo.PedidosPostulante pp {join_pp} WHERE pp.PostulanteCandidatoId = c.CandidatoId{cli_a}
+                   AND pp.EventoId IN (11, 12)
+                   AND pp.PostulanteFecha = (SELECT MAX(pp2.PostulanteFecha) FROM dbo.PedidosPostulante pp2
+                                             WHERE pp2.PedidoId = pp.PedidoId AND pp2.PostulanteCandidatoId = pp.PostulanteCandidatoId)))"""
+    return sql, ([cliente, cliente] if cliente is not None else [])
+
+
+def _where_busqueda(filtros):
+    w, p = where(filtros)
+    cond, params = [w], list(p)
+    if filtros.get("busqueda"):
+        t = filtros["busqueda"]
+        cond.append("(CHARINDEX(%s, c.CandidatoNombre) > 0 OR CHARINDEX(%s, c.CandidatoApellido) > 0 "
+                    "OR CHARINDEX(%s, CAST(c.CandidatoNroDocumento AS VARCHAR(20))) > 0 "
+                    "OR CHARINDEX(%s, RTRIM(c.CandidatoNombre) + ' ' + RTRIM(c.CandidatoApellido)) > 0)")
+        params += [t, t, t, t]
+    for clave, col in (("estado_civil_id", "EstadoCivilId"), ("categoria_libreta_id", "CategoriaLibretaConducirId")):
+        if filtros.get(clave) is not None:
+            cond.append(f"c.{col} = %s")
+            params.append(filtros[clave])
+    edad = {"18-25": "BETWEEN 18 AND 25", "26-35": "BETWEEN 26 AND 35", "36-45": "BETWEEN 36 AND 45",
+            "46-55": "BETWEEN 46 AND 55", "56+": ">= 56"}.get(filtros.get("rango_edad"))
+    if edad:
+        cond.append(f"{EDAD} {edad}")
+    sal = {"0-20k": "> 0 AND c.CandidatoSalarioPretendido < 20000", "20-40k": "BETWEEN 20000 AND 40000",
+           "40-60k": "BETWEEN 40000 AND 60000", "60-80k": "BETWEEN 60000 AND 80000", "80k+": ">= 80000"}.get(filtros.get("rango_salario"))
+    if sal:
+        cond.append(f"c.CandidatoSalarioPretendido {sal}")
+    for clave, col in _SI_NO_COL.items():
+        if filtros.get(clave) in _SI_NO:
+            cond.append(f"c.{col} = '{'S' if filtros[clave] == 'si' else 'N'}'")
+    if filtros.get("carnet_vigente") == "si":
+        cond.append("c.CandidatoCarneSalud = 'S' AND c.CandidatoVencimientoCarneSalud >= GETDATE()")
+    elif filtros.get("carnet_vigente") == "no":
+        cond.append("(c.CandidatoCarneSalud = 'N' OR c.CandidatoVencimientoCarneSalud < GETDATE())")
+    for clave, si, no in (("con_email", _TIENE_EMAIL, _SIN_EMAIL), ("con_celular", _TIENE_CEL, _SIN_CEL)):
+        if filtros.get(clave) == "si":
+            cond.append(si)
+        elif filtros.get(clave) == "no":
+            cond.append(no)
+    ent = {"0": "= 0", "1-2": "BETWEEN 1 AND 2", "3-5": "BETWEEN 3 AND 5", "6-10": "BETWEEN 6 AND 10",
+           "10+": "> 10"}.get(filtros.get("cantidad_entrevistas"))
+    if ent:
+        cond.append(f"{_N_ENTREVISTAS} {ent}")
+    if filtros.get("entrevista_reciente") in ("30", "90", "180", "365"):
+        cond.append("EXISTS (SELECT 1 FROM dbo.Entrevistas e WHERE e.CandidatoId = c.CandidatoId "
+                    "AND e.EntrevistaFecha >= DATEADD(DAY, -%s, GETDATE()))")
+        params.append(int(filtros["entrevista_reciente"]))
+    cal = {"excelente": "> 8", "bueno": "BETWEEN 6 AND 8", "regular": "< 6"}.get(filtros.get("calificacion"))
+    if cal:
+        cond.append(f"{_CALIF} {cal}")
+    if filtros.get("cliente_id") is not None:
+        cond.append("EXISTS (SELECT 1 FROM dbo.Entrevistas e INNER JOIN dbo.Pedidos pe ON e.EntrevistaPedidoId = pe.PedidoId "
+                    "WHERE e.CandidatoId = c.CandidatoId AND pe.ClienteId = %s)")
+        params.append(filtros["cliente_id"])
+    if filtros.get("tiene_asignaciones") in _SI_NO:
+        sql, ps = _trabajo_en_cliente(filtros.get("cliente_id"))
+        cond.append(sql if filtros["tiene_asignaciones"] == "si" else f"NOT {sql}")
+        params += ps
+    return " AND ".join(cond), params
+
+
+COLUMNAS_BUSQUEDA = ["Candidato Id", "Candidato", "Edad", "Sexo", "Perfil", "Nivel educativo", "Departamento", "Libreta",
+                     "Salario pretendido", "Entrevistas", "Última entrevista", "Calificación", "Tiene email", "Tiene celular"]
+_ORDEN_BUSQUEDA = {"apellido": "c.CandidatoApellido, c.CandidatoNombre", "edad": "c.CandidatoFechaNacimiento DESC",
+                   "perfil": "pc.PerfilCandidatoDescripcion", "salario": "c.CandidatoSalarioPretendido DESC",
+                   "entrevistas": "total_entrevistas DESC"}
+
+
+def _buscar(filtros, condicion="1=1", params=None, top=500):
+    w, p = _where_busqueda(filtros)
+    orden = _ORDEN_BUSQUEDA.get(filtros.get("orden"), _ORDEN_BUSQUEDA["apellido"])
+    return sgo.filas(f"""
+        SELECT TOP {int(top)} c.CandidatoId, {NOMBRE} AS candidato, CASE WHEN {EDAD} BETWEEN 15 AND 90 THEN {EDAD} END AS edad,
+               CASE c.CandidatoSexo WHEN 'M' THEN 'Masculino' WHEN 'F' THEN 'Femenino' ELSE '' END AS sexo,
+               RTRIM(pc.PerfilCandidatoDescripcion) AS perfil, RTRIM(ne.NivelEducativoDescripcion) AS nivel,
+               RTRIM(d.DepartamentoNombre) AS departamento,
+               CASE WHEN c.CandidatoLibretaConducir = 'S' THEN 'Sí' ELSE 'No' END AS libreta,
+               c.CandidatoSalarioPretendido AS salario, {_N_ENTREVISTAS} AS total_entrevistas,
+               (SELECT MAX(e.EntrevistaFecha) FROM dbo.Entrevistas e WHERE e.CandidatoId = c.CandidatoId) AS ultima_entrevista,
+               ROUND({_CALIF}, 1) AS calificacion,
+               CASE WHEN {_TIENE_EMAIL} THEN 'Sí' ELSE 'No' END AS tiene_email,
+               CASE WHEN {_TIENE_CEL} THEN 'Sí' ELSE 'No' END AS tiene_celular
+        FROM dbo.Candidatos c
+        LEFT JOIN dbo.PerfilesCandidatos pc ON c.PerfilCandidatoId = pc.PerfilCandidatoId
+        LEFT JOIN dbo.NivelesEducativos ne ON c.NivelEducativoId = ne.NivelEducativoId
+        LEFT JOIN dbo.Departamentos d ON c.CandidatoDepartamentoId = d.DepartamentoId
+        WHERE {w} AND ({condicion}) ORDER BY {orden}""", p + list(params or []))
+
+
+@catalogo.registrar(
+    "busqueda", "Búsqueda de candidatos",
+    "Buscador con todos los filtros del SGO: datos personales, disponibilidad, entrevistas, calificación y si ya trabajó en un cliente.",
+    usa_periodo=False, icono="bi-search", filtros=FILTROS_BUSQUEDA,
+)
+def busqueda(periodo, filtros):
+    w, p = _where_busqueda(filtros)
+    total_b = num(sgo.valor(f"SELECT COUNT(*) AS total FROM dbo.Candidatos c WHERE {w}", p))
+    k = sgo.fila(f"""
+        SELECT SUM(CASE WHEN c.CandidatoNoAsignable = 'N' THEN 1 ELSE 0 END) AS asignables,
+               SUM(CASE WHEN {_TIENE_EMAIL} OR {_TIENE_CEL} THEN 1 ELSE 0 END) AS con_contacto,
+               SUM(CASE WHEN EXISTS (SELECT 1 FROM dbo.Entrevistas e WHERE e.CandidatoId = c.CandidatoId) THEN 1 ELSE 0 END) AS entrevistados,
+               ROUND(AVG(CASE WHEN {EDAD} BETWEEN 18 AND 80 THEN {EDAD} END), 0) AS edad_promedio
+        FROM dbo.Candidatos c WHERE {w}""", p)
+    perfiles = sgo.filas(f"""SELECT TOP 15 RTRIM(pc.PerfilCandidatoDescripcion) AS label, COUNT(*) AS value
+                             FROM dbo.Candidatos c {JOIN_PERFIL} WHERE {w}
+                             GROUP BY pc.PerfilCandidatoId, pc.PerfilCandidatoDescripcion ORDER BY value DESC""", p)
+    deptos = sgo.filas(f"""SELECT TOP 15 RTRIM(d.DepartamentoNombre) AS label, COUNT(*) AS value
+                           FROM dbo.Candidatos c INNER JOIN dbo.Departamentos d ON c.CandidatoDepartamentoId = d.DepartamentoId
+                           WHERE {w} GROUP BY d.DepartamentoId, d.DepartamentoNombre ORDER BY value DESC""", p)
+    primeros = _buscar(filtros, top=100)
+    secciones = [
+        seccion("Resultados por perfil (top 15)", [lider(perfiles, "label", "value", "candidatos")],
+                g.ranking(etiquetas(perfiles), valores(perfiles, "value"), "Candidatos"), alto=g.alto_ranking(len(perfiles), 200),
+                explicacion="Perfil de los candidatos que cumplen la búsqueda.", detalle="perfil",
+                ayuda_detalle="Hacé clic en un perfil para ver esos candidatos con buscador y exportación a Excel."),
+        seccion("Resultados por departamento (top 15)", [lider(deptos, "label", "value", "candidatos")],
+                g.ranking(etiquetas(deptos), valores(deptos, "value"), "Candidatos", g.SERIES[1]), alto=g.alto_ranking(len(deptos), 200),
+                explicacion="Departamento de residencia de los candidatos que cumplen la búsqueda.", detalle="departamento",
+                ayuda_detalle="Hacé clic en un departamento para ver esos candidatos."),
+        seccion(f"Primeros {min(len(primeros), 100)} resultados",
+                ["Para ver todos (hasta 500) con buscador y exportación, hacé clic en una barra de los gráficos de arriba."], None,
+                tabla=tabla("Candidatos", ["Candidato", "Edad", "Perfil", "Departamento", "Salario pretendido", "Entrevistas", "Calificación"],
+                            [[r["candidato"], entero(r["edad"]) if r["edad"] else "", r["perfil"] or "", r["departamento"] or "",
+                              entero(r["salario"]) if num(r["salario"]) else "", entero(r["total_entrevistas"]),
+                              decimal(r["calificacion"]) if r["calificacion"] is not None else ""] for r in primeros])),
+    ]
+    return {
+        "kpis": [
+            kpi("Candidatos encontrados", entero(total_b)),
+            kpi("Asignables", entero(k.get("asignables")), pct(proporcion(k.get("asignables"), total_b))),
+            kpi("Con contacto", entero(k.get("con_contacto")), "email o celular"),
+            kpi("Entrevistados", entero(k.get("entrevistados")), pct(proporcion(k.get("entrevistados"), total_b))),
+            kpi("Edad promedio", f"{entero(k.get('edad_promedio'))} años"),
+        ],
+        "conclusiones": [f"La búsqueda encontró {entero(total_b)} candidatos.", lider(perfiles, "label", "value", "candidatos")],
+        "secciones": secciones,
+        "sugerencias": ["¿Cuántos choferes con libreta hay en Montevideo?", "¿Qué candidatos asignables tienen más entrevistas?"],
+        "contexto_ia": {"total": total_b, "kpis": k, "perfiles": perfiles, "departamentos": deptos},
+    }
+
+
+@catalogo.detalle("busqueda")
+def detalle_busqueda(clave, valor, serie, periodo, filtros):
+    if clave == "perfil":
+        condicion = "RTRIM(pc.PerfilCandidatoDescripcion) = %s"
+    else:
+        condicion = "RTRIM(d.DepartamentoNombre) = %s"
+    filas = _buscar(filtros, condicion, [valor])
+    return respuesta_detalle(f"Candidatos · {valor}", COLUMNAS_BUSQUEDA, filas)

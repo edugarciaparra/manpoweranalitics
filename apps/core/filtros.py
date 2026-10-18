@@ -28,7 +28,7 @@ class Filtro:
     def __init__(self, nombre, etiqueta, tipo, tabla=None, opciones=None, defecto=None, ancho=2):
         self.nombre = nombre
         self.etiqueta = etiqueta
-        self.tipo = tipo          # varios | uno | fecha | fijo | numero
+        self.tipo = tipo          # varios | uno | fecha | fijo | numero | texto
         self.tabla = tabla        # tabla de referencia de catalogos.py
         self._opciones = opciones
         self.defecto = defecto
@@ -55,6 +55,11 @@ class Filtro:
     def numero(cls, nombre, etiqueta, defecto):
         return cls(nombre, etiqueta, "numero", defecto=defecto)
 
+    @classmethod
+    def texto(cls, nombre, etiqueta):
+        """Texto libre para buscar (se pasa siempre como parámetro %s)."""
+        return cls(nombre, etiqueta, "texto", ancho=3)
+
     def opciones(self):
         """[(valor, texto), ...] ordenado por texto."""
         if self._opciones is not None:
@@ -80,6 +85,8 @@ class Filtro:
         if self.tipo == "fijo":
             validas = {str(k) for k in self._opciones}
             return crudo if crudo in validas else self.defecto
+        if self.tipo == "texto":
+            return crudo[:80] or None
         if self.tipo == "numero":
             try:
                 return int(crudo) if crudo else self.defecto
