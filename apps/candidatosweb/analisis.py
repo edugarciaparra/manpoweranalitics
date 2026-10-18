@@ -13,6 +13,8 @@ from apps.core.utils import (
     contar_por_mes, etiqueta_mes, formato_numero, formato_pct, formato_pesos, meses_completos, siguientes_meses,
 )
 
+from apps.core.catalogos import catalogo as tabla_referencia
+
 from . import cv, services
 from .services import ETAPAS, SI
 
@@ -230,7 +232,10 @@ def ubicacion(periodo):
     total = len(filas)
     deptos = Counter(_depto(f) for f in filas).most_common()
     grafico_deptos = _barras_h("Registrados", [d for d, _ in deptos], [v for _, v in deptos], alto_barra=16)
-    interior = sum(v for d, v in deptos if d not in ("Montevideo", "Canelones", "Sin dato"))
+    con_dato = [(d, v) for d, v in deptos if d != "Sin dato"]
+    principal = con_dato[0] if con_dato else ("—", 0)
+    top2 = sum(v for _, v in con_dato[:2])
+    resto = sum(v for _, v in con_dato[2:])
 
     locs = Counter(f"{f['localidad']} ({f['departamento']})" for f in filas if f["localidad"]).most_common(12)
     grafico_locs = _barras_h("Registrados", [l for l, _ in locs], [v for _, v in locs], g.SERIES[2])
@@ -239,14 +244,14 @@ def ubicacion(periodo):
     return {
         "kpis": [
             {"label": "Registrados", "valor": formato_numero(total), "detalle": PERIODOS_WEB[periodo].lower()},
-            {"label": "Montevideo", "valor": f"{_pct(dict(deptos).get('Montevideo', 0), total)}%", "detalle": "del total"},
-            {"label": "Interior (sin Canelones)", "valor": f"{_pct(interior, total)}%", "detalle": f"{formato_numero(interior)} personas"},
+            {"label": "Departamento principal", "valor": principal[0], "detalle": f"{_pct(principal[1], total)}% del total"},
+            {"label": "Fuera de los 2 principales", "valor": f"{_pct(resto, total)}%", "detalle": f"{formato_numero(resto)} personas"},
             {"label": "Sin departamento", "valor": formato_numero(sin_dato), "alerta": sin_dato > 0,
              "detalle": "no completaron el dato"},
         ],
         "conclusiones": [
-            f"Montevideo y Canelones concentran el {_pct(dict(deptos).get('Montevideo', 0) + dict(deptos).get('Canelones', 0), total)}% de los registrados.",
-            f"El interior (sin Canelones) aporta {_pct(interior, total)}%: para pedidos fuera del área metropolitana la base es chica.",
+            f"{' y '.join(d for d, _ in con_dato[:2])} concentran el {_pct(top2, total)}% de los registrados.",
+            f"El resto de los departamentos aporta {_pct(resto, total)}%: para pedidos en esas zonas la base es más chica.",
             f"{locs[0][0]} es la localidad con más registrados." if locs else "",
             f"{formato_numero(sin_dato)} registros no tienen departamento: no aparecen en búsquedas por zona.",
         ],
@@ -261,7 +266,7 @@ def ubicacion(periodo):
                     explicacion="Las 12 localidades con más registrados. Solo se cuentan los que completaron la localidad.",
                     lectura=["Sirve para decidir dónde publicar avisos zonales o abrir búsquedas por barrio."]),
         ],
-        "sugerencias": ["¿Tenemos candidatos suficientes en Maldonado para la temporada?", "¿Dónde conviene publicar?"],
+        "sugerencias": ["¿En qué departamentos nos faltan candidatos?", "¿Dónde conviene publicar?"],
         "contexto_ia": {"total": total, "departamentos": dict(deptos), "localidades": dict(locs)},
     }
 
@@ -706,7 +711,8 @@ def experiencia_laboral(periodo):
                                 "En azul los grupos por encima de la media y en rojo los que están por debajo.",
                     lectura=["La experiencia mejora las chances de ingresar, sobre todo a partir del primer año."]),
         ],
-        "sugerencias": ["¿Cuántos tienen experiencia como cajero?", "¿Conviene presentar candidatos sin experiencia?"],
+        "sugerencias": [f"¿Cuántos tienen experiencia como {top_cargos[0][0].lower()}?" if top_cargos else "¿Qué cargos son más comunes?",
+                        "¿Conviene presentar candidatos sin experiencia?"],
         "contexto_ia": {"por_anios": dict(por_bucket), "cargos": dict(top_cargos), "ingreso_por_anios": dict(zip(etiq_b, tasas))},
     }
 
@@ -733,7 +739,8 @@ def permanencia(periodo):
     grafico_cargos = _barras_h("Meses (mediana)", [c for c, _ in cargos], [v for _, v in cargos], g.SERIES[0],
                                formato="{c} m")
     cortos = sum(por_bucket[e] for e in etiq[:2])
-    zafra = dict(causales).get("Fin de contrato / zafra", 0)
+    causales_con_dato = [(c, v) for c, v in causales if c != "Sin motivo"]
+    sin_motivo = dict(causales).get("Sin motivo", 0)
     largos_por_persona = Counter(e["web_user_id"] for e in cv.experiencia() if e["meses"] >= 24)
     estables = len(largos_por_persona)
 
@@ -763,14 +770,15 @@ def permanencia(periodo):
             seccion("Por qué se fueron", grafico=grafico_causas, alto=300, detalle="causal",
                     ayuda_detalle="Hacé clic en un motivo para ver quiénes salieron por esa razón.",
                     explicacion="Motivo de salida declarado en cada trabajo terminado (campo causal de baja del CV).",
-                    lectura=[f"{formato_numero(zafra)} salidas fueron por fin de contrato o zafra: personas acostumbradas a trabajos temporales."],
+                    lectura=[f"{formato_numero(sin_motivo)} trabajos terminados no tienen motivo cargado." if sin_motivo else "",
+                             f"Los tres motivos principales explican el {_pct(sum(v for _, v in causales_con_dato[:3]), len(trabajos))}% de las salidas."],
                     acciones=[
-                        {"prioridad": "media", "titulo": "Usar a los zafrales para pedidos de temporada",
-                         "detalle": f"{formato_numero(zafra)} salidas fueron por fin de zafra o contrato: ya conocen la modalidad "
-                                    "y suelen aceptar trabajos temporales."},
-                        {"prioridad": "baja", "titulo": "Preguntar por la renuncia por mejor oferta",
-                         "detalle": "Es el motivo más común: en la entrevista conviene validar salario y condiciones para "
-                                    "evitar que se vayan rápido de la asignación."},
+                        {"prioridad": "media", "titulo": f"Indagar «{causales_con_dato[0][0]}» en la entrevista",
+                         "detalle": "Es el motivo de salida más común. Preguntar por él ayuda a anticipar si el candidato "
+                                    "va a sostener la asignación."} if causales_con_dato else None,
+                        {"prioridad": "baja", "titulo": "Completar el motivo de baja en los CV",
+                         "detalle": f"{formato_numero(sin_motivo)} trabajos terminados no lo tienen: con el dato el análisis "
+                                    "de rotación es más preciso."} if sin_motivo else None,
                     ]),
             seccion("Permanencia por cargo", grafico=grafico_cargos, alto=380, detalle="cargo",
                     ayuda_detalle="Hacé clic en un cargo para ver quiénes lo tuvieron.",
@@ -793,7 +801,8 @@ def formacion(periodo):
     perfil = cv.perfil_cv()
     ids = {f["id"] for f in filas}
     total = len(filas)
-    niveles = cv.NIVELES_EDUCATIVOS
+    # Niveles en el orden de la tabla NivelesEducativos (por Id)
+    niveles = [d for _, d in sorted(tabla_referencia("NivelesEducativos").items())]
 
     completos = [sum(1 for f in filas if perfil[f["id"]]["nivel_max"] == n and perfil[f["id"]]["nivel_completo"]) for n in niveles]
     incompletos = [sum(1 for f in filas if perfil[f["id"]]["nivel_max"] == n and not perfil[f["id"]]["nivel_completo"]) for n in niveles]
@@ -810,7 +819,8 @@ def formacion(periodo):
 
     cursos = Counter()
     for fm in cv.formacion():
-        if fm["web_user_id"] in ids and fm["nivel_orden"] >= 3:
+        # Se excluyen los cursos que se llaman igual que el nivel (no aportan información)
+        if fm["web_user_id"] in ids and fm["curso"] != fm["nivel"]:
             cursos[fm["curso"]] += 1
     top = cursos.most_common(12)
     grafico_cursos = _barras_h("Personas", [c for c, _ in top], [v for _, v in top], g.SERIES[6])
@@ -828,45 +838,54 @@ def formacion(periodo):
                  "markLine": {"silent": True, "symbol": "none", "lineStyle": {"color": g.TINTA_SUAVE, "type": "dashed"},
                               "label": {"formatter": f"media {media}%", "color": g.TINTA_SUAVE}, "data": [{"yAxis": media}]}}],
     )
-    con_terciaria = sum(completos[i] + incompletos[i] for i in range(4, len(niveles)))
-    bachiller_completo = sum(completos[i] for i in range(2, len(niveles)))
-    mas_comun = niveles[max(range(len(niveles)), key=lambda i: completos[i] + incompletos[i])]
+    i_comun = max(range(len(niveles)), key=lambda i: completos[i] + incompletos[i])
+    mas_comun = niveles[i_comun]
+    # "Por encima del más común": niveles posteriores en la tabla
+    por_encima = sum(completos[i] + incompletos[i] for i in range(i_comun + 1, len(niveles)))
     incompletos_tot = sum(incompletos)
+    sin_formacion = sum(1 for f in filas if perfil[f["id"]]["nivel_max"] is None)
 
     return {
         "kpis": [
             {"label": "Nivel más común", "valor": mas_comun, "detalle": "máximo nivel alcanzado"},
-            {"label": "Bachillerato completo o más", "valor": f"{_pct(bachiller_completo, total)}%", "detalle": f"{formato_numero(bachiller_completo)} personas"},
-            {"label": "Formación terciaria", "valor": f"{_pct(con_terciaria, total)}%", "detalle": "terciario, universitario o posgrado"},
+            {"label": f"Por encima de {mas_comun.lower()}", "valor": f"{_pct(por_encima, total)}%", "detalle": f"{formato_numero(por_encima)} personas"},
+            {"label": "Sin formación cargada", "valor": formato_numero(sin_formacion), "alerta": sin_formacion > 0,
+             "detalle": "no completaron estudios en el CV"},
             {"label": "Último nivel sin terminar", "valor": f"{_pct(incompletos_tot, total)}%", "detalle": "lo están cursando o lo dejaron"},
         ],
         "conclusiones": [
-            f"El nivel más frecuente es {mas_comun.lower()}; {_pct(con_terciaria, total)}% tiene formación terciaria.",
+            f"El nivel más frecuente es {mas_comun.lower()}; {_pct(por_encima, total)}% tiene un nivel superior.",
             f"{_pct(incompletos_tot, total)}% no terminó su último nivel: muchos estudian y buscan horarios compatibles.",
             f"Los que más ingresan son los de nivel {niveles[tasas.index(max(tasas))].lower()} ({max(tasas)}%).",
-            f"{top[0][0]} es la formación técnica o terciaria más común." if top else "",
+            f"{top[0][0]} es el curso o carrera más común." if top else "",
         ],
         "secciones": [
             seccion("Máximo nivel educativo", grafico=grafico_nivel, alto=320, detalle="nivel",
                     ayuda_detalle="Hacé clic en una barra para ver las personas de ese nivel (completo o incompleto).",
                     explicacion="Para cada persona se toma el nivel más alto que cargó en el CV. La parte oscura de la barra "
                                 "son quienes lo terminaron y la clara quienes lo dejaron o lo están cursando.",
-                    lectura=[f"{formato_numero(completos[2] + incompletos[2])} personas llegaron hasta bachillerato."]),
+                    lectura=[f"{formato_numero(completos[i_comun] + incompletos[i_comun])} personas tienen como máximo {mas_comun.lower()}."]),
             seccion("Qué estudiaron", grafico=grafico_cursos, alto=380, detalle="curso",
                     ayuda_detalle="Hacé clic en una formación para ver quiénes la tienen.",
-                    explicacion="Las 12 formaciones técnicas, terciarias o universitarias más frecuentes (de la tabla de "
-                                "cursos y carreras).",
-                    lectura=["Útil para pedidos que piden una formación específica (administración, logística, informática)."]),
+                    explicacion="Los 12 cursos o carreras más frecuentes en los CV, con el nombre de la tabla CursosCarreras.",
+                    lectura=["Útil para pedidos que piden una formación específica."]),
             seccion("Cuánto influye la formación en el ingreso", grafico=grafico_tasa, alto=300, detalle="nivel",
                     ayuda_detalle="Hacé clic en una barra para ver las personas de ese nivel.",
                     explicacion="Porcentaje de cada nivel educativo que terminó ingresando. En azul los niveles por encima "
                                 "de la media y en rojo los que están por debajo.",
                     lectura=["Para muchos puestos operativos un nivel alto no garantiza ingresar: pesan más la experiencia y la disponibilidad."]),
         ],
-        "sugerencias": ["¿Cuántos tienen formación en logística?", "¿Los estudiantes aceptan horario rotativo?"],
+        "sugerencias": [f"¿Cuántos estudiaron {top[0][0]}?" if top else "¿Qué formación es más común?",
+                        "¿Los estudiantes aceptan horario rotativo?"],
         "contexto_ia": {"por_nivel": dict(zip(niveles, map(sum, zip(completos, incompletos)))),
                         "ingreso_por_nivel": dict(zip(niveles, tasas)), "formaciones": dict(top)},
     }
+
+
+def _idioma_principal():
+    """El idioma más declarado en los CV (sale de los datos, no está fijo en el código)."""
+    conteo = Counter(i["idioma"] for i in cv.idiomas())
+    return conteo.most_common(1)[0][0] if conteo else ""
 
 
 @catalogo.registrar(
@@ -879,7 +898,10 @@ def idiomas(periodo):
     ids = {f["id"] for f in filas}
     total = len(filas)
     decl = [i for i in cv.idiomas() if i["web_user_id"] in ids]
-    lista = [k for k, _ in Counter(i["idioma"] for i in decl).most_common()]
+    ranking = Counter(i["idioma"] for i in decl).most_common()
+    lista = [k for k, _ in ranking]
+    principal = _idioma_principal()
+    segundo = lista[1] if len(lista) > 1 else None
     colores = [g.AZUL[0], g.AZUL[2], g.AZUL[3], g.AZUL[5], g.SERIES[1]]
     grafico_idiomas = g.base(
         legend=g.leyenda(data=list(cv.NIVELES_IDIOMA.values())),
@@ -889,56 +911,59 @@ def idiomas(periodo):
         yAxis=g.eje_categorias(lista, inverse=True),
         series=[{"name": nombre, "type": "bar", "stack": "i", "barMaxWidth": 26,
                  "data": [sum(1 for i in decl if i["idioma"] == idi and i["nivel"] == nivel) for idi in lista],
-                 "itemStyle": {"color": colores[nivel - 1]}}
+                 "itemStyle": {"color": colores[(nivel - 1) % len(colores)]}}
                 for nivel, nombre in cv.NIVELES_IDIOMA.items()],
     )
-    ingles_bueno = {i["web_user_id"] for i in decl if i["idioma"] == "Inglés" and i["nivel"] >= cv.NIVEL_IDIOMA_BUENO}
-    por_tramo = [_pct(sum(1 for f in filas if f["id"] in ingles_bueno and _tramo(f["edad"]) == t),
+    bueno = {i["web_user_id"] for i in decl if i["idioma"] == principal and i["nivel"] >= cv.NIVEL_IDIOMA_BUENO}
+    por_tramo = [_pct(sum(1 for f in filas if f["id"] in bueno and _tramo(f["edad"]) == t),
                       sum(1 for f in filas if _tramo(f["edad"]) == t)) for t in TRAMOS_ETIQ]
     grafico_tramo = g.base(
         tooltip={"trigger": "axis", "confine": True, "axisPointer": {"type": "shadow"}, "valueFormatter": "fmt:pct"},
         xAxis=g.eje_categorias(TRAMOS_ETIQ, name="Edad", nameLocation="middle", nameGap=28),
         yAxis=g.eje_valores("fmt:pct"),
         grid={"left": 8, "right": 16, "top": 24, "bottom": 28, "containLabel": True},
-        series=[g.barras(f"Inglés nivel {cv.NIVEL_IDIOMA_BUENO} o más", por_tramo, g.SERIES[0],
+        series=[g.barras(f"{principal} nivel {cv.NIVEL_IDIOMA_BUENO} o más", por_tramo, g.SERIES[0],
                          label={"show": True, "position": "top", "formatter": "{c}%", "color": g.TINTA_SUAVE})],
     )
     con_idioma = len({i["web_user_id"] for i in decl})
-    avanzado = len({i["web_user_id"] for i in decl if i["idioma"] == "Inglés" and i["nivel"] >= cv.NIVEL_IDIOMA_ALTO})
-    portugues = len({i["web_user_id"] for i in decl if i["idioma"] == "Portugués"})
+    alto = len({i["web_user_id"] for i in decl if i["idioma"] == principal and i["nivel"] >= cv.NIVEL_IDIOMA_ALTO})
+    n_segundo = len({i["web_user_id"] for i in decl if i["idioma"] == segundo}) if segundo else 0
 
     return {
         "kpis": [
             {"label": "Declaran algún idioma", "valor": f"{_pct(con_idioma, total)}%", "detalle": f"{formato_numero(con_idioma)} personas"},
-            {"label": f"Inglés nivel {cv.NIVEL_IDIOMA_BUENO} o más", "valor": formato_numero(len(ingles_bueno)), "detalle": f"{_pct(len(ingles_bueno), total)}% del total"},
-            {"label": f"Inglés nivel {cv.NIVEL_IDIOMA_ALTO}", "valor": formato_numero(avanzado), "detalle": "candidatos para puestos bilingües"},
-            {"label": "Portugués", "valor": formato_numero(portugues), "detalle": "útil en zonas de frontera y turismo"},
+            {"label": f"{principal} nivel {cv.NIVEL_IDIOMA_BUENO} o más", "valor": formato_numero(len(bueno)),
+             "detalle": f"{_pct(len(bueno), total)}% del total"},
+            {"label": f"{principal} nivel {cv.NIVEL_IDIOMA_ALTO}", "valor": formato_numero(alto), "detalle": "nivel más alto declarado"},
+            {"label": segundo or "Segundo idioma", "valor": formato_numero(n_segundo), "detalle": "segundo idioma más declarado"},
         ],
         "conclusiones": [
-            f"{_pct(con_idioma, total)}% declara al menos un idioma; inglés es por lejos el más común.",
-            f"Solo {formato_numero(avanzado)} personas tienen inglés en el nivel más alto: es la reserva para puestos bilingües.",
-            (f"Los más jóvenes tienen mejor inglés: {por_tramo[0]}% en 18–24 contra {por_tramo[-1]}% en 50+."
+            f"{_pct(con_idioma, total)}% declara al menos un idioma; {principal} es el más común." if principal else "Nadie declara idiomas.",
+            f"{formato_numero(alto)} personas tienen {principal} en el nivel más alto: es la reserva para puestos bilingües.",
+            (f"Los más jóvenes tienen mejor {principal}: {por_tramo[0]}% en 18–24 contra {por_tramo[-1]}% en 50+."
              if por_tramo[0] > por_tramo[-1] + 3 else
-             f"El inglés no cambia mucho con la edad: {por_tramo[0]}% en 18–24 y {por_tramo[-1]}% en 50+."),
-            f"{formato_numero(portugues)} declaran portugués, útil para Rivera, Artigas y la temporada en Maldonado.",
+             f"El nivel de {principal} no cambia mucho con la edad: {por_tramo[0]}% en 18–24 y {por_tramo[-1]}% en 50+."),
+            f"{segundo} es el segundo idioma, con {formato_numero(n_segundo)} personas." if segundo else "",
         ],
         "secciones": [
             seccion("Idiomas y nivel", grafico=grafico_idiomas, alto=280, detalle="idioma",
                     ayuda_detalle="Hacé clic en una barra para ver quiénes tienen ese idioma con ese nivel.",
-                    explicacion="Cantidad de personas que declararon cada idioma, partida por nivel del 1 al 5: del celeste (nivel 1) al "
-                                "azul oscuro y naranja (nivel 5, el más alto).",
-                    lectura=[f"Inglés: {formato_numero(sum(1 for i in decl if i['idioma'] == 'Inglés'))} personas."]),
-            seccion("Inglés según la edad", grafico=grafico_tramo, alto=280, detalle="ingles_tramo",
-                    ayuda_detalle=f"Hacé clic en un tramo para ver quiénes tienen inglés nivel {cv.NIVEL_IDIOMA_BUENO} o más.",
-                    explicacion=f"Porcentaje de cada tramo de edad que declara inglés de nivel {cv.NIVEL_IDIOMA_BUENO} o superior (escala del 1 al 5).",
-                    lectura=[f"El tramo con más inglés es {TRAMOS_ETIQ[por_tramo.index(max(por_tramo))]} años ({max(por_tramo)}%)."],
-                    acciones=[{"prioridad": "media", "titulo": "Validar el nivel de inglés en la entrevista",
+                    explicacion="Cantidad de personas que declararon cada idioma (nombres de la tabla Competencias), partida "
+                                "por nivel del 1 al 5: del celeste (nivel 1) al azul oscuro y naranja (nivel 5, el más alto).",
+                    lectura=[f"{ranking[0][0]}: {formato_numero(ranking[0][1])} personas." if ranking else ""]),
+            seccion(f"{principal} según la edad", grafico=grafico_tramo, alto=280, detalle="idioma_tramo",
+                    ayuda_detalle=f"Hacé clic en un tramo para ver quiénes tienen {principal} nivel {cv.NIVEL_IDIOMA_BUENO} o más.",
+                    explicacion=f"Porcentaje de cada tramo de edad que declara {principal} de nivel {cv.NIVEL_IDIOMA_BUENO} "
+                                "o superior (escala del 1 al 5). Se usa el idioma más declarado.",
+                    lectura=[f"El tramo con mejor nivel es {TRAMOS_ETIQ[por_tramo.index(max(por_tramo))]} años ({max(por_tramo)}%)."],
+                    acciones=[{"prioridad": "media", "titulo": "Validar el nivel de idioma en la entrevista",
                                "detalle": "El nivel es autodeclarado. Para puestos bilingües, una prueba corta evita "
                                           "presentar candidatos que no cumplen."}]),
         ],
-        "sugerencias": ["¿Cuántos candidatos bilingües tenemos?", "¿Dónde buscar gente con portugués?"],
-        "contexto_ia": {"con_idioma": con_idioma, "ingles_nivel_bueno_o_mas": len(ingles_bueno),
-                        "ingles_avanzado": avanzado, "portugues": portugues},
+        "sugerencias": ["¿Cuántos candidatos bilingües tenemos?", f"¿Dónde buscar gente con {segundo}?" if segundo
+                        else "¿Qué idiomas faltan en la base?"],
+        "contexto_ia": {"con_idioma": con_idioma, "ranking": dict(ranking), "principal": principal,
+                        "principal_nivel_bueno_o_mas": len(bueno), "principal_nivel_alto": alto},
     }
 
 
@@ -982,9 +1007,10 @@ def _filtro_cv(clave, valor, serie):
         ids = {i["web_user_id"] for i in cv.idiomas() if i["idioma"] == valor and (nivel is None or i["nivel"] == nivel)}
         return (f"{valor}{' · ' + serie.lower() if nivel else ''}", lambda f: f["id"] in ids,
                 ("Idiomas", lambda f: ", ".join(perfil[f["id"]]["idiomas"])))
-    if clave == "ingles_tramo":
-        ids = {i["web_user_id"] for i in cv.idiomas() if i["idioma"] == "Inglés" and i["nivel"] >= cv.NIVEL_IDIOMA_BUENO}
-        return (f"Inglés nivel {cv.NIVEL_IDIOMA_BUENO} o más, {valor} años", lambda f: f["id"] in ids and _tramo(f["edad"]) == valor,
+    if clave == "idioma_tramo":
+        principal = _idioma_principal()
+        ids = {i["web_user_id"] for i in cv.idiomas() if i["idioma"] == principal and i["nivel"] >= cv.NIVEL_IDIOMA_BUENO}
+        return (f"{principal} nivel {cv.NIVEL_IDIOMA_BUENO} o más, {valor} años", lambda f: f["id"] in ids and _tramo(f["edad"]) == valor,
                 ("Idiomas", lambda f: ", ".join(perfil[f["id"]]["idiomas"])))
     return None
 

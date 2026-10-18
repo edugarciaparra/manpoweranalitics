@@ -110,6 +110,17 @@ python manage.py probar_sgo
 - Las variables llevan prefijo `SGO_` para no chocar con un `DB_USER` definido en Windows,
   y el `.env` siempre le gana a las variables del sistema.
 
+## Tablas de referencia
+
+Las descripciones (motivos de baja, niveles educativos, cursos, idiomas,
+departamentos, localidades, estados civiles) nunca se escriben en el código:
+salen de sus tablas en `sgo_new` con JOIN, o desde `apps/core/catalogos.py`
+(`catalogo("CausalesBaja")`, `cursos()`, ...). Sin la base conectada, ese archivo
+usa tablas de ejemplo con la misma estructura (Id → descripción).
+
+Los datos se guardan 15 minutos en memoria (`apps/core/cache.py`) para no
+consultar la base en cada pantalla.
+
 ## Asistente de IA
 
 En `.env`, `IA_PROVEEDOR=mock` responde textos de ejemplo sin clave.

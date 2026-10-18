@@ -93,7 +93,8 @@ class Catalogo:
 def seccion(titulo, lectura, grafico=None, alto=320, descripcion="", tabla=None, acciones=None,
             explicacion="", detalle=None, ayuda_detalle=""):
     """Arma una sección de un análisis. Las acciones quedan con su prioridad lista para mostrar."""
-    for a in acciones or []:
+    acciones = [a for a in (acciones or []) if a]  # permite acciones condicionales (None se descarta)
+    for a in acciones:
         a["prioridad_info"] = PRIORIDADES[a["prioridad"]]
     return {
         "titulo": titulo,
