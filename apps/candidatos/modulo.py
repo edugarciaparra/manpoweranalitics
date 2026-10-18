@@ -4,10 +4,10 @@ from . import services
 MODULO = {
     "slug": "candidatos",
     "titulo": "Candidatos",
-    "descripcion": "Quiénes se postulan, de qué canales vienen y quiénes tienen más chances de ingresar.",
+    "descripcion": "Perfil, disponibilidad, geografía, experiencia, calidad de datos, pruebas y referencias de los candidatos.",
     "icono": "bi-person-badge",
     "color": "#E07A00",
-    "palabras_clave": "postulantes perfil canales puntaje probabilidad",
+    "palabras_clave": "candidatos perfil disponibilidad libreta zafrales geografico pruebas referencias calidad datos",
 }
 
 

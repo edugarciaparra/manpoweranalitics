@@ -75,7 +75,7 @@ MODULOS_ANALISIS = [
     "apps.facturacion",
     "apps.clientes",
     "apps.candidatosweb",
-    # "apps.candidatos",  # fuera del menú por ahora
+    "apps.candidatos",
     "apps.entrevistas",
     "apps.viaticos",
 ]

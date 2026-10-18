@@ -1,257 +1,654 @@
-"""Análisis del módulo Candidatos."""
-from collections import Counter, defaultdict
-
+"""
+Análisis del módulo Candidatos: las pantallas de candidatos del SGO (can_res,
+can_perpro, can_mov, can_geo, can_exp, can_dat, can_err, can_pru, can_ref,
+canins y la búsqueda can_det) con el mismo SQL, filtros y registros en el modal.
+"""
 from apps.core import graficos as g
+from apps.core import sgo
 from apps.core.analisis import Catalogo, seccion
-from apps.core.estadistica import mediana, pronostico
-from apps.core.utils import contar_por_mes, etiqueta_mes, meses_completos, siguientes_meses
+from apps.core.pantalla import (
+    concentracion, decimal, detalle as respuesta_detalle, entero, etiquetas, extremos, kpi, lider, pct, proporcion,
+    tabla, total, valores,
+)
+from apps.core.sgo import num
 
-from . import services
+from . import services as s
+from .services import DESEMPENO, EDAD, NOMBRE, contiene, where
 
 catalogo = Catalogo()
 
-TRAMOS = [(18, 24), (25, 29), (30, 34), (35, 39), (40, 44), (45, 49), (50, 62)]
-BANDAS = [(0, 3), (3, 4), (4, 5), (5, 6), (6, 7), (7, 10.1)]
 
-
-def _pct(a, b):
-    return round(a / b * 100) if b else 0
-
-
-def _banda(puntaje):
-    for i, (a, b) in enumerate(BANDAS):
-        if a <= puntaje < b:
-            return i
-    return len(BANDAS) - 1
+def _orden(filas, orden, campo="label"):
+    return sorted(filas, key=lambda r: orden.index(r[campo]) if r[campo] in orden else 99)
 
 
 # ==========================================================================
-# Perfil y fuentes de candidatos
+# 1. Resumen general (can_res)
 # ==========================================================================
+_EDADES = ["18-24 años", "25-35 años", "36-45 años", "46-55 años", "56+ años"]
+_CASE_EDAD = (f"CASE WHEN {EDAD} < 25 THEN '18-24 años' WHEN {EDAD} BETWEEN 25 AND 35 THEN '25-35 años' "
+              f"WHEN {EDAD} BETWEEN 36 AND 45 THEN '36-45 años' WHEN {EDAD} BETWEEN 46 AND 55 THEN '46-55 años' ELSE '56+ años' END")
+
+
 @catalogo.registrar(
-    "perfil", "Perfil y fuentes de candidatos",
-    "Quiénes se postulan, de qué canales vienen, cuáles funcionan mejor y cuántos candidatos se esperan.",
-    icono="bi-people",
+    "resumen", "Resumen general",
+    "Cuántos candidatos hay, cuántos se pueden asignar y cómo se distribuyen por sexo, edad, país, estado civil, educación y perfil.",
+    usa_periodo=False, icono="bi-speedometer2", filtros=[s.F_PERFIL, s.F_PAIS, s.F_SEXO, s.F_ASIGNABLE],
 )
-def perfil(periodo):
-    cand = services.candidatos(periodo)
-    total = len(cand)
+def resumen(periodo, filtros):
+    w, p = where(filtros)
+    k = sgo.fila(f"""
+        SELECT COUNT(*) AS total_candidatos, SUM(CASE WHEN c.CandidatoNoAsignable = 'N' THEN 1 ELSE 0 END) AS candidatos_asignables,
+               SUM(CASE WHEN c.CandidatoNoAsignable = 'S' THEN 1 ELSE 0 END) AS candidatos_no_asignables,
+               ROUND(AVG(CASE WHEN {EDAD} BETWEEN 18 AND 80 THEN {EDAD} END), 0) AS edad_promedio,
+               SUM(CASE WHEN c.CandidatoCarneSalud = 'S' AND c.CandidatoVencimientoCarneSalud >= GETDATE() THEN 1 ELSE 0 END) AS con_carne_vigente,
+               ROUND(AVG({DESEMPENO}), 1) AS promedio_desempeno
+        FROM dbo.Candidatos c WHERE {w}""", p)
+    genero = sgo.filas(f"""
+        SELECT CASE c.CandidatoSexo WHEN 'M' THEN 'Masculino' WHEN 'F' THEN 'Femenino' ELSE 'Sin especificar' END AS label, COUNT(*) AS value
+        FROM dbo.Candidatos c WHERE {w} GROUP BY c.CandidatoSexo ORDER BY value DESC""", p)
+    edades = _orden(sgo.filas(f"SELECT {_CASE_EDAD} AS label, COUNT(*) AS value FROM dbo.Candidatos c WHERE {w} GROUP BY {_CASE_EDAD}", p),
+                    _EDADES)
 
-    # --- Quiénes son ------------------------------------------------------
-    etiquetas = [f"{a}–{b}" if b < 62 else f"{a}+" for a, b in TRAMOS]
-    def contar(sexo):
-        return [sum(1 for c in cand if c["sexo"] == sexo and a <= c["edad"] <= b) for a, b in TRAMOS]
-    mujeres, hombres = contar("F"), contar("M")
-    grafico_piramide = g.base(
-        legend=g.leyenda(data=["Mujeres", "Hombres"]),
-        tooltip={"trigger": "axis", "confine": True, "axisPointer": {"type": "shadow"}},
-        xAxis=g.eje_valores(axisLabel={"formatter": "fmt:abs", "color": g.TINTA_SUAVE}),
-        yAxis=g.eje_categorias(etiquetas, name="Edad", nameLocation="end"),
-        series=[
-            {"name": "Mujeres", "type": "bar", "stack": "p", "barMaxWidth": 26, "data": [-v for v in mujeres],
-             "itemStyle": {"color": g.SERIES[1], "borderRadius": [4, 0, 0, 4]}, "tooltip": {"valueFormatter": "fmt:abs"}},
-            {"name": "Hombres", "type": "bar", "stack": "p", "barMaxWidth": 26, "data": hombres,
-             "itemStyle": {"color": g.SERIES[0], "borderRadius": [0, 4, 4, 0]}},
-        ],
-    )
-    tramo_top = max(range(len(TRAMOS)), key=lambda i: mujeres[i] + hombres[i])
-    niveles = Counter(c["nivel"] for c in cand).most_common()
-    deptos = Counter(c["departamento"] for c in cand).most_common()
+    def por(join, id_col_c, id_col, desc):
+        return sgo.filas(f"""SELECT RTRIM(x.{desc}) AS label, COUNT(*) AS value FROM dbo.Candidatos c
+                             INNER JOIN dbo.{join} x ON c.{id_col_c} = x.{id_col}
+                             WHERE {w} GROUP BY x.{id_col}, x.{desc} ORDER BY value DESC""", p)
 
-    # --- De dónde vienen y cuáles funcionan -------------------------------
-    por_canal = defaultdict(lambda: [0, 0])
-    for c in cand:
-        por_canal[c["canal"]][0] += 1
-        por_canal[c["canal"]][1] += c["etapa"] == 2
-    canales = sorted(por_canal.items(), key=lambda x: -_pct(x[1][1], x[1][0]))
-    conv_media = _pct(sum(c["etapa"] == 2 for c in cand), total)
-    grafico_canales = g.base(
-        legend=g.leyenda(),
-        tooltip={"trigger": "axis", "confine": True, "axisPointer": {"type": "shadow"}},
-        grid={"left": 8, "right": 16, "top": 36, "bottom": 8, "containLabel": True},
-        xAxis=g.eje_categorias([c for c, _ in canales]),
-        yAxis=g.eje_valores(),
-        series=[
-            g.barras("Candidatos", [v[0] for _, v in canales], g.AZUL[1]),
-            g.barras("Ingresaron", [v[1] for _, v in canales], g.SERIES[0], barGap="-100%",
-                     label={"show": True, "position": "top", "color": g.TINTA_SUAVE, "formatter": "{c}"}),
-        ],
-    )
-    mejor, peor = canales[0], canales[-1]
-    mas_volumen = max(canales, key=lambda x: x[1][0])
+    paises = por("Paises", "CandidatoResidenciaId", "PaisId", "PaisNombre")
+    civiles = por("EstadosCiviles", "EstadoCivilId", "EstadoCivilId", "EstadoCivilDescripcion")
+    niveles = por("NivelesEducativos", "NivelEducativoId", "NivelEducativoId", "NivelEducativoDescripcion")
+    perfiles = por("PerfilesCandidatos", "PerfilCandidatoId", "PerfilCandidatoId", "PerfilCandidatoDescripcion")
 
-    # --- Cuántos van a llegar ---------------------------------------------
-    meses = meses_completos(24)
-    todos = services.candidatos()
-    serie = contar_por_mes(todos, meses)
-    p = pronostico(serie, pasos=3)
-    futuros = siguientes_meses(meses[-1], 3)
-    grafico_pronostico = g.serie_pronostico(serie[-12:], p, [etiqueta_mes(*m) for m in meses[-12:]],
-                                            [etiqueta_mes(*m) for m in futuros], nombre="Candidatos")
-    ingresos_esperados = round(sum(p["valores"]) * conv_media / 100)
+    def bloque(titulo, filas, clave, explicacion, color=None, top=None):
+        filas_g = filas[:top] if top else filas
+        return seccion(titulo, [lider(filas, "label", "value", "candidatos"), concentracion(filas, "value", 3, "candidatos")],
+                       g.ranking(etiquetas(filas_g), valores(filas_g, "value"), "Candidatos", color),
+                       alto=g.alto_ranking(len(filas_g), 200), explicacion=explicacion, detalle=clave,
+                       ayuda_detalle="Hacé clic en una barra para ver esos candidatos.")
 
-    # --- Qué hacer --------------------------------------------------------
-    acciones = [
-        {"prioridad": "alta", "titulo": f"Potenciar {mejor[0]}",
-         "detalle": f"Convierte {_pct(mejor[1][1], mejor[1][0])}% (media {conv_media}%) pero aporta solo "
-                    f"{_pct(mejor[1][0], total)}% de los candidatos. Darle más presupuesto o difusión."},
-        {"prioridad": "media", "titulo": f"Revisar los avisos en {peor[0]}",
-         "detalle": f"Convierte {_pct(peor[1][1], peor[1][0])}%. Ajustar requisitos y textos de los avisos para filtrar mejor."},
+    total_c = num(k.get("total_candidatos"))
+    secciones = [
+        seccion("Distribución por sexo", [lider(genero, "label", "value", "candidatos")],
+                g.torta([(r["label"], num(r["value"])) for r in genero]), explicacion="Sexo registrado del candidato.",
+                detalle="sexo", ayuda_detalle="Hacé clic en una porción para ver esos candidatos."),
+        seccion("Distribución por rango de edad", [lider(edades, "label", "value", "candidatos")],
+                g.columnas(etiquetas(edades), {"Candidatos": valores(edades, "value")}, rotar=0),
+                explicacion="Edad actual según la fecha de nacimiento.", detalle="edad",
+                ayuda_detalle="Hacé clic en un rango para ver esos candidatos."),
+        bloque("Candidatos por país de residencia", paises, "pais", "País de residencia declarado.", g.SERIES[1], 15),
+        bloque("Distribución por estado civil", civiles, "estado_civil", "Estado civil registrado.", g.SERIES[2]),
+        bloque("Distribución por nivel educativo", niveles, "nivel", "Nivel educativo máximo registrado.", g.SERIES[3]),
+        bloque("Candidatos por perfil profesional", perfiles, "perfil", "Perfil profesional asignado al candidato.", None, 20),
     ]
-    if deptos and _pct(deptos[0][1], total) > 50:
-        acciones.append({"prioridad": "baja", "titulo": "Atraer más candidatos del interior",
-                         "detalle": f"{deptos[0][0]} concentra {_pct(deptos[0][1], total)}%. Publicar en medios locales "
-                                    "para los pedidos fuera de la capital."})
-
     return {
         "kpis": [
-            {"label": "Candidatos", "valor": total, "detalle": "en el período"},
-            {"label": "Edad mediana", "valor": round(mediana([c["edad"] for c in cand])), "detalle": "años"},
-            {"label": "Mejor canal", "valor": mejor[0], "detalle": f"{_pct(mejor[1][1], mejor[1][0])}% llega a ingresar"},
-            {"label": f"Esperados en {etiqueta_mes(*futuros[0])}", "valor": round(p["valores"][0]),
-             "detalle": f"entre {round(p['inferior'][0])} y {round(p['superior'][0])}"},
+            kpi("Total candidatos", entero(total_c)),
+            kpi("Asignables", entero(k.get("candidatos_asignables")), pct(proporcion(k.get("candidatos_asignables"), total_c))),
+            kpi("No asignables", entero(k.get("candidatos_no_asignables")), "", "Marcados como no asignables (CandidatoNoAsignable = 'S')."),
+            kpi("Edad promedio", f"{entero(k.get('edad_promedio'))} años", "", "Solo edades entre 18 y 80."),
+            kpi("Con carné de salud vigente", entero(k.get("con_carne_vigente")), pct(proporcion(k.get("con_carne_vigente"), total_c))),
+            kpi("Desempeño promedio", decimal(k.get("promedio_desempeno")), "", "Promedio de desempeño general registrado (mayor a 0)."),
         ],
         "conclusiones": [
-            f"El tramo de edad más frecuente es {etiquetas[tramo_top]} años; {_pct(sum(mujeres), total)}% son mujeres y "
-            f"{niveles[0][0].lower()} es el nivel más común.",
-            f"{mas_volumen[0]} trae más candidatos, pero {mejor[0]} es el que mejor convierte "
-            f"({_pct(mejor[1][1], mejor[1][0])}% contra {conv_media}% de media).",
-            f"En los próximos 3 meses llegarían unos {round(sum(p['valores']))} candidatos y {ingresos_esperados} ingresos.",
-            f"Mover parte de la difusión a {mejor[0]} mejoraría la calidad de los candidatos sin aumentar el volumen.",
+            f"Hay {entero(total_c)} candidatos; {pct(proporcion(k.get('candidatos_asignables'), total_c))} son asignables.",
+            lider(perfiles, "label", "value", "candidatos"),
+            f"La edad promedio es de {entero(k.get('edad_promedio'))} años y {lider(edades, 'label', 'value', 'candidatos').lower()}",
         ],
-        "secciones": [
-            seccion("Quiénes se postulan", grafico=grafico_piramide, lectura=[
-                f"El tramo con más candidatos es {etiquetas[tramo_top]} años.",
-                f"{deptos[0][0]} concentra el {_pct(deptos[0][1], total)}% de los candidatos." if deptos else "",
-                "Mujeres a la izquierda y hombres a la derecha, por tramo de edad.",
-            ], tabla={
-                "titulo": "Nivel educativo",
-                "columnas": ["Nivel", "Candidatos", "%", "Ingresaron"],
-                "filas": [[n, v, f"{_pct(v, total)}%", f"{_pct(sum(1 for c in cand if c['nivel'] == n and c['etapa'] == 2), v)}%"]
-                          for n, v in niveles],
-            }),
-            seccion("De dónde vienen y cuáles funcionan", grafico=grafico_canales, alto=300,
-                    descripcion="Candidatos por canal de publicación y cuántos llegaron a ingresar.", lectura=[
-                        f"{mas_volumen[0]} aporta {_pct(mas_volumen[1][0], total)}% de los candidatos.",
-                        f"{mejor[0]} convierte {_pct(mejor[1][1], mejor[1][0])}% y {peor[0]} solo {_pct(peor[1][1], peor[1][0])}%.",
-                    ]),
-            seccion("Cuántos candidatos se esperan", grafico=grafico_pronostico, acciones=acciones, lectura=[
-                f"Para {etiqueta_mes(*futuros[0])} se esperan unos {round(p['valores'][0])} candidatos.",
-                f"Con la conversión actual ({conv_media}%) eso daría unos {ingresos_esperados} ingresos en 3 meses.",
-            ]),
-        ],
-        "sugerencias": ["¿Por qué los referidos convierten más?", "¿En qué canal conviene invertir?",
-                        "¿Cómo atraer más candidatos del interior?"],
-        "contexto_ia": {"total": total, "por_canal": {c: v for c, v in canales}, "niveles": dict(niveles),
-                        "departamentos": dict(deptos), "proyeccion": round(sum(p["valores"]))},
+        "secciones": secciones,
+        "sugerencias": ["¿Qué perfiles tienen más candidatos?", "¿Cuántos candidatos asignables hay?"],
+        "contexto_ia": {"kpis": k, "genero": genero, "edades": edades, "perfiles": perfiles[:15], "niveles": niveles},
     }
 
 
+def _condicion_basica(clave, valor):
+    return {
+        "sexo": ("c.CandidatoSexo = %s" if valor in ("Masculino", "Femenino") else "(c.CandidatoSexo NOT IN ('M', 'F') OR c.CandidatoSexo IS NULL)",
+                 [{"Masculino": "M", "Femenino": "F"}[valor]] if valor in ("Masculino", "Femenino") else []),
+        "edad": ({"18-24 años": f"{EDAD} < 25", "25-35 años": f"{EDAD} BETWEEN 25 AND 35", "36-45 años": f"{EDAD} BETWEEN 36 AND 45",
+                  "46-55 años": f"{EDAD} BETWEEN 46 AND 55"}.get(valor, f"{EDAD} > 55"), []),
+        "pais": ("RTRIM(pa.PaisNombre) = %s", [valor]),
+        "estado_civil": ("RTRIM(ec.EstadoCivilDescripcion) = %s", [valor]),
+        "nivel": ("RTRIM(ne.NivelEducativoDescripcion) = %s", [valor]),
+        "perfil": ("RTRIM(pc.PerfilCandidatoDescripcion) = %s", [valor]),
+    }.get(clave, ("1=0", []))
+
+
+_JOIN_CIVIL = "LEFT JOIN dbo.EstadosCiviles ec ON c.EstadoCivilId = ec.EstadoCivilId"
+
+
+@catalogo.detalle("resumen")
+def detalle_resumen(clave, valor, serie, periodo, filtros):
+    condicion, params = _condicion_basica(clave, valor)
+    filas = s.candidatos(filtros, condicion, params, joins=_JOIN_CIVIL)
+    return respuesta_detalle(f"Candidatos · {valor}", s.COLUMNAS_CANDIDATO, filas)
+
+
 # ==========================================================================
-# Probabilidad de ingreso
+# 2. Perfil profesional (can_perpro)
 # ==========================================================================
+_UNIVERSITARIO = f"({contiene('ne.NivelEducativoDescripcion', 'Universi')})"
+_SECUNDARIA = (f"({_UNIVERSITARIO} OR {contiene('ne.NivelEducativoDescripcion', 'Terciari')} "
+               f"OR {contiene('ne.NivelEducativoDescripcion', 'Tecnicatura')} "
+               f"OR ({contiene('ne.NivelEducativoDescripcion', 'Bachillerato')} AND {contiene('ne.NivelEducativoDescripcion', 'Complet')}) "
+               f"OR ({contiene('ne.NivelEducativoDescripcion', 'Liceo')} AND {contiene('ne.NivelEducativoDescripcion', 'Complet')}) "
+               f"OR ({contiene('ne.NivelEducativoDescripcion', 'Secundari')} AND NOT {contiene('ne.NivelEducativoDescripcion', 'Incomplet')}))")
+_EDADES_CORTAS = ["18-24", "25-35", "36-45", "46-55", "56+"]
+_CASE_EDAD_CORTA = (f"CASE WHEN {EDAD} < 25 THEN '18-24' WHEN {EDAD} BETWEEN 25 AND 35 THEN '25-35' WHEN {EDAD} BETWEEN 36 AND 45 "
+                    f"THEN '36-45' WHEN {EDAD} BETWEEN 46 AND 55 THEN '46-55' ELSE '56+' END")
+JOIN_NIVEL = "INNER JOIN dbo.NivelesEducativos ne ON c.NivelEducativoId = ne.NivelEducativoId"
+JOIN_PERFIL = "INNER JOIN dbo.PerfilesCandidatos pc ON c.PerfilCandidatoId = pc.PerfilCandidatoId"
+
+
 @catalogo.registrar(
-    "probabilidad", "Probabilidad de ingreso",
-    "Qué perfil termina ingresando, qué tan probable es para cada candidato en proceso y a quién presentar primero.",
-    usa_periodo=False, icono="bi-bullseye",
+    "perfil", "Perfil profesional",
+    "Perfiles y nivel educativo de los candidatos, cómo se cruzan, su desempeño y la composición por edad de cada perfil.",
+    usa_periodo=False, icono="bi-mortarboard", filtros=[s.F_PERFIL, s.F_NIVEL, s.F_PAIS],
 )
-def probabilidad(periodo):
-    historia = services.candidatos()
-    cerrados = [c for c in historia if not c["en_proceso"]]
+def perfil(periodo, filtros):
+    w, p = where(filtros)
+    wc2, pc2 = where(filtros, "c2")
+    k = sgo.fila(f"""
+        SELECT COUNT(*) AS total_candidatos, COUNT(DISTINCT c.PerfilCandidatoId) AS perfiles_distintos,
+               SUM(CASE WHEN {_UNIVERSITARIO} THEN 1 ELSE 0 END) AS con_universitario,
+               SUM(CASE WHEN {_SECUNDARIA} THEN 1 ELSE 0 END) AS con_secundaria_completa,
+               ROUND(AVG({DESEMPENO}), 1) AS promedio_desempeno
+        FROM dbo.Candidatos c {JOIN_NIVEL} WHERE {w}""", p)
+    con_entrevista = num(sgo.valor(f"""SELECT COUNT(DISTINCT e.CandidatoId) AS con_experiencia FROM dbo.Entrevistas e
+                                        INNER JOIN dbo.Candidatos c2 ON e.CandidatoId = c2.CandidatoId WHERE {wc2}""", pc2))
+    perfiles = sgo.filas(f"""
+        SELECT RTRIM(pc.PerfilCandidatoDescripcion) AS label, COUNT(*) AS value, ROUND(AVG({DESEMPENO}), 1) AS desempeno_promedio
+        FROM dbo.Candidatos c {JOIN_PERFIL} WHERE {w}
+        GROUP BY pc.PerfilCandidatoId, pc.PerfilCandidatoDescripcion ORDER BY value DESC""", p)
+    niveles = sgo.filas(f"""SELECT RTRIM(ne.NivelEducativoDescripcion) AS label, COUNT(*) AS value FROM dbo.Candidatos c {JOIN_NIVEL}
+                            WHERE {w} GROUP BY ne.NivelEducativoId, ne.NivelEducativoDescripcion ORDER BY value DESC""", p)
+    cruce = sgo.filas(f"""
+        SELECT RTRIM(pc.PerfilCandidatoDescripcion) AS perfil, RTRIM(ne.NivelEducativoDescripcion) AS nivel, COUNT(*) AS cantidad
+        FROM dbo.Candidatos c {JOIN_PERFIL} {JOIN_NIVEL} WHERE {w}
+        GROUP BY pc.PerfilCandidatoId, pc.PerfilCandidatoDescripcion, ne.NivelEducativoId, ne.NivelEducativoDescripcion
+        HAVING COUNT(*) >= 3""", p)
+    desempeno = sgo.filas(f"""
+        SELECT TOP 15 RTRIM(pc.PerfilCandidatoDescripcion) AS label, COUNT(*) AS total_candidatos,
+               ROUND(AVG({DESEMPENO}), 2) AS desempeno_promedio, MIN(c.CandidatoPromedioDesemGral) AS desempeno_minimo,
+               MAX(c.CandidatoPromedioDesemGral) AS desempeno_maximo
+        FROM dbo.Candidatos c {JOIN_PERFIL} WHERE {w} AND c.CandidatoPromedioDesemGral > 0
+        GROUP BY pc.PerfilCandidatoId, pc.PerfilCandidatoDescripcion HAVING COUNT(*) >= 5 ORDER BY desempeno_promedio DESC""", p)
+    piramide = sgo.filas(f"""
+        WITH PerfilTotales AS (SELECT TOP 6 c.PerfilCandidatoId FROM dbo.Candidatos c WHERE {w}
+                               GROUP BY c.PerfilCandidatoId HAVING COUNT(*) >= 10 ORDER BY COUNT(*) DESC)
+        SELECT RTRIM(pc.PerfilCandidatoDescripcion) AS perfil, {_CASE_EDAD_CORTA} AS rango_edad, COUNT(*) AS cantidad
+        FROM dbo.Candidatos c {JOIN_PERFIL} INNER JOIN PerfilTotales pt ON c.PerfilCandidatoId = pt.PerfilCandidatoId
+        WHERE {w} GROUP BY pc.PerfilCandidatoDescripcion, {_CASE_EDAD_CORTA}""", p + p)
+    universitarios = sgo.filas(f"""
+        SELECT TOP 10 RTRIM(pc.PerfilCandidatoDescripcion) AS label, COUNT(*) AS total_candidatos,
+               SUM(CASE WHEN {_UNIVERSITARIO} THEN 1 ELSE 0 END) AS con_universitario,
+               ROUND(CAST(SUM(CASE WHEN {_UNIVERSITARIO} THEN 1 ELSE 0 END) AS FLOAT) / COUNT(*) * 100, 2) AS pct_universitario
+        FROM dbo.Candidatos c {JOIN_PERFIL} {JOIN_NIVEL} WHERE {w}
+        GROUP BY pc.PerfilCandidatoId, pc.PerfilCandidatoDescripcion HAVING COUNT(*) >= 5 ORDER BY pct_universitario DESC""", p)
 
-    # --- Qué perfil ingresa -----------------------------------------------
-    tasa_nivel = []
-    for n in services.NIVELES:
-        grupo = [c for c in cerrados if c["nivel"] == n]
-        tasa_nivel.append(_pct(sum(c["etapa"] == 2 for c in grupo), len(grupo)))
-    grafico_nivel = g.base(
-        tooltip={"trigger": "axis", "confine": True, "axisPointer": {"type": "shadow"}, "valueFormatter": "fmt:pct"},
-        grid={"left": 8, "right": 48, "top": 8, "bottom": 8, "containLabel": True},
-        xAxis=g.eje_valores("fmt:pct", max=100),
-        yAxis=g.eje_categorias(services.NIVELES),
-        series=[g.barras("Ingresan", tasa_nivel, g.SERIES[0], barMaxWidth=22,
-                         itemStyle={"color": g.SERIES[0], "borderRadius": [0, 4, 4, 0]},
-                         label={"show": True, "position": "right", "formatter": "{c}%", "color": g.TINTA_SUAVE})],
-    )
-
-    # --- Probabilidad según puntaje ---------------------------------------
-    tasa = []
-    for i in range(len(BANDAS)):
-        grupo = [c for c in cerrados if _banda(c["puntaje"]) == i]
-        tasa.append(_pct(sum(c["etapa"] == 2 for c in grupo), len(grupo)))
-    etiquetas = [f"{a:g}–{b:g}" if b < 10 else f"{a:g}+" for a, b in BANDAS]
-    grafico_puntaje = g.base(
-        tooltip={"trigger": "axis", "confine": True, "axisPointer": {"type": "shadow"}, "valueFormatter": "fmt:pct"},
-        grid={"left": 8, "right": 16, "top": 24, "bottom": 36, "containLabel": True},
-        xAxis=g.eje_categorias(etiquetas, name="Puntaje (formación 40% + experiencia 60%)", nameLocation="middle", nameGap=30),
-        yAxis=g.eje_valores("fmt:pct", max=100),
-        series=[g.barras("Probabilidad de ingreso",
-                         [{"value": t, "itemStyle": {"color": g.AZUL[min(i + 1, len(g.AZUL) - 1)]}} for i, t in enumerate(tasa)],
-                         label={"show": True, "position": "top", "formatter": "{c}%", "color": g.TINTA})],
-    )
-
-    # --- A quién presentar primero ----------------------------------------
-    en_proceso = sorted([c for c in historia if c["en_proceso"]], key=lambda c: -c["puntaje"])
-    prob = {c["id"]: tasa[_banda(c["puntaje"])] for c in en_proceso}
-    esperados = sum(prob.values()) / 100
-    # Alta / baja probabilidad, relativas a la tasa de ingreso histórica
-    media = _pct(sum(c["etapa"] == 2 for c in cerrados), len(cerrados))
-    umbral_alto, umbral_bajo = round(media * 1.2), round(media * .6)
-    altos = [c for c in en_proceso if prob[c["id"]] >= umbral_alto]
-    bajos = [c for c in en_proceso if prob[c["id"]] < umbral_bajo]
-    acciones = []
-    if altos:
-        acciones.append({"prioridad": "alta", "titulo": f"Presentar primero a {len(altos)} candidatos de alta probabilidad",
-                         "detalle": f"Tienen {umbral_alto}% o más de chances de ingresar (la media es {media}%). "
-                                    "Presentarlos al cliente esta semana: "
-                                    + ", ".join(f"#{c['id']} ({c['puesto']})" for c in altos[:4]) + "."})
-    puestos_bajos = Counter(c["puesto"] for c in bajos).most_common(1)
-    if bajos:
-        acciones.append({"prioridad": "media", "titulo": f"Buscar más candidatos para {puestos_bajos[0][0].lower()}",
-                         "detalle": f"Hay {len(bajos)} candidatos en proceso con menos de {umbral_bajo}% de probabilidad, sobre todo "
-                                    "para ese puesto. Ampliar la búsqueda antes de que venza el pedido."})
-    acciones.append({"prioridad": "baja", "titulo": "Usar el puntaje como filtro inicial",
-                     "detalle": f"Debajo de 3 puntos la probabilidad es {tasa[0]}%. Revisar esos casos antes de "
-                                "dedicarles una entrevista completa."})
-
+    top_perfiles = [r["label"] for r in perfiles[:12]]
+    top_niveles = [r["label"] for r in niveles[:8]]
+    celdas = [[top_niveles.index(r["nivel"]), top_perfiles.index(r["perfil"]), num(r["cantidad"])]
+              for r in cruce if r["perfil"] in top_perfiles and r["nivel"] in top_niveles]
+    perfiles_p = list(dict.fromkeys(r["perfil"] for r in piramide))
+    series_p = {e: [next((num(r["cantidad"]) for r in piramide if r["perfil"] == pf and r["rango_edad"] == e), 0) for pf in perfiles_p]
+                for e in _EDADES_CORTAS}
+    total_c = num(k.get("total_candidatos"))
+    secciones = [
+        seccion("Candidatos por perfil profesional", [lider(perfiles, "label", "value", "candidatos"),
+                                                      concentracion(perfiles, "value", 5, "candidatos")],
+                g.ranking(etiquetas(perfiles[:20]), valores(perfiles[:20], "value"), "Candidatos"), alto=g.alto_ranking(min(20, len(perfiles))),
+                explicacion="Los 20 perfiles con más candidatos.", detalle="perfil",
+                ayuda_detalle="Hacé clic en un perfil para ver sus candidatos."),
+        seccion("Nivel educativo detallado", [lider(niveles, "label", "value", "candidatos")],
+                g.ranking(etiquetas(niveles), valores(niveles, "value"), "Candidatos", g.SERIES[2]), alto=g.alto_ranking(len(niveles)),
+                explicacion="Candidatos por nivel educativo registrado.", detalle="nivel",
+                ayuda_detalle="Hacé clic en un nivel para ver esos candidatos."),
+        seccion("Cruce perfil × nivel educativo", ["Las celdas más oscuras son las combinaciones más frecuentes."],
+                g.mapa_calor(top_niveles, top_perfiles, celdas), alto=max(340, 30 * len(top_perfiles) + 130),
+                explicacion="Candidatos de cada perfil (filas, los 12 principales) según su nivel educativo (columnas, los 8 principales)."),
+        seccion("Desempeño promedio por perfil", [extremos(desempeno, "label", "desempeno_promedio", decimal, "mejor desempeño", "peor")],
+                g.ranking(etiquetas(desempeno), valores(desempeno, "desempeno_promedio"), "Desempeño promedio", g.SERIES[1]),
+                alto=g.alto_ranking(len(desempeno)),
+                explicacion="Promedio de desempeño general de los candidatos evaluados de cada perfil (5 o más).", detalle="perfil",
+                ayuda_detalle="Hacé clic en un perfil para ver sus candidatos."),
+        seccion("Composición por edad de los 6 perfiles principales", [],
+                g.columnas(perfiles_p, series_p, apiladas=True), alto=360,
+                explicacion="Candidatos de cada perfil apilados por rango de edad.", detalle="perfil",
+                ayuda_detalle="Hacé clic en un perfil para ver sus candidatos."),
+        seccion("Perfiles con más educación universitaria", [extremos(universitarios, "label", "pct_universitario", pct, "mayor", "menor")],
+                g.ranking(etiquetas(universitarios), valores(universitarios, "pct_universitario"), "% universitarios", g.SERIES[3],
+                          formato="fmt:pct"),
+                alto=g.alto_ranking(len(universitarios)),
+                explicacion="Parte de los candidatos de cada perfil (5 o más) con nivel universitario."),
+    ]
     return {
         "kpis": [
-            {"label": "En proceso", "valor": len(en_proceso), "detalle": "candidatos sin resultado"},
-            {"label": "Ingresos esperados", "valor": round(esperados), "detalle": "suma de probabilidades"},
-            {"label": "Alta probabilidad", "valor": len(altos), "detalle": f"{umbral_alto}% o más (media {media}%)"},
-            {"label": "Entre extremos de puntaje", "valor": f"{tasa[-1] - tasa[0]} pts",
-             "detalle": f"de {tasa[0]}% a {tasa[-1]}%"},
+            kpi("Total candidatos", entero(total_c)),
+            kpi("Perfiles distintos", entero(k.get("perfiles_distintos"))),
+            kpi("Con educación universitaria", entero(k.get("con_universitario")), pct(proporcion(k.get("con_universitario"), total_c))),
+            kpi("Secundaria completa o más", entero(k.get("con_secundaria_completa")),
+                pct(proporcion(k.get("con_secundaria_completa"), total_c))),
+            kpi("Con al menos una entrevista", entero(con_entrevista), pct(proporcion(con_entrevista, total_c))),
+            kpi("Desempeño promedio", decimal(k.get("promedio_desempeno"))),
         ],
         "conclusiones": [
-            f"El puntaje de la entrevista predice bien el resultado: con {etiquetas[-1]} puntos ingresa el {tasa[-1]}% "
-            f"y con menos de 3, el {tasa[0]}%.",
-            f"El nivel educativo con más ingresos es {services.NIVELES[tasa_nivel.index(max(tasa_nivel))].lower()} "
-            f"({max(tasa_nivel)}%).",
-            f"De los {len(en_proceso)} candidatos en proceso se esperan unos {round(esperados)} ingresos.",
-            f"Presentar primero a los {len(altos)} de alta probabilidad acorta el tiempo de cierre de los pedidos."
-            if altos else "Ningún candidato en proceso supera la media con holgura: conviene ampliar la búsqueda.",
+            lider(perfiles, "label", "value", "candidatos"),
+            f"{pct(proporcion(k.get('con_universitario'), total_c))} tiene educación universitaria y "
+            f"{pct(proporcion(k.get('con_secundaria_completa'), total_c))} al menos secundaria completa.",
+            extremos(desempeno, "label", "desempeno_promedio", decimal, "perfil de mejor desempeño", "peor"),
         ],
-        "secciones": [
-            seccion("Qué perfil termina ingresando", grafico=grafico_nivel, alto=260,
-                    descripcion="Porcentaje de candidatos que ingresaron, por nivel educativo.", lectura=[
-                        "A mayor nivel educativo, mayor probabilidad de ingresar, aunque la experiencia pesa más.",
-                    ]),
-            seccion("Probabilidad según el puntaje de la entrevista", grafico=grafico_puntaje, lectura=[
-                f"Un candidato con {etiquetas[-1]} puntos tiene {tasa[-1]}% de probabilidad de ingresar.",
-                "Se calcula con todos los procesos terminados; los que siguen en curso no se cuentan.",
-            ]),
-            seccion("A quién presentar primero", acciones=acciones, lectura=[
-                "Candidatos en proceso ordenados por puntaje, con su probabilidad de ingresar.",
-            ], tabla={
-                "titulo": "Candidatos en proceso",
-                "columnas": ["Candidato", "Puesto", "Puntaje", "Probabilidad", "Canal"],
-                "filas": [[f"#{c['id']}", c["puesto"], c["puntaje"], f"{prob[c['id']]}%", c["canal"]]
-                          for c in en_proceso[:10]],
-                "vacio": "No hay candidatos en proceso.",
-            }),
-        ],
-        "sugerencias": ["¿Qué pesa más, la formación o la experiencia?",
-                        "¿Conviene presentar candidatos con puntaje bajo?", "¿Qué candidato presento primero?"],
-        "contexto_ia": {"probabilidad_por_puntaje": dict(zip(etiquetas, tasa)),
-                        "por_nivel": dict(zip(services.NIVELES, tasa_nivel)), "en_proceso": len(en_proceso)},
+        "secciones": secciones,
+        "sugerencias": ["¿Qué perfiles tienen mejor desempeño?", "¿Qué nivel educativo predomina?"],
+        "contexto_ia": {"kpis": k, "perfiles": perfiles[:15], "niveles": niveles, "desempeno": desempeno},
     }
+
+
+@catalogo.detalle("perfil")
+def detalle_perfil(clave, valor, serie, periodo, filtros):
+    condicion, params = _condicion_basica(clave, valor)
+    if clave == "perfil" and serie in _EDADES_CORTAS:
+        condicion += " AND " + {"18-24": f"{EDAD} < 25", "25-35": f"{EDAD} BETWEEN 25 AND 35", "36-45": f"{EDAD} BETWEEN 36 AND 45",
+                                "46-55": f"{EDAD} BETWEEN 46 AND 55"}.get(serie, f"{EDAD} > 55")
+    filas = s.candidatos(filtros, condicion, params)
+    return respuesta_detalle(f"Candidatos · {valor}" + (f" · {serie}" if serie in _EDADES_CORTAS else ""), s.COLUMNAS_CANDIDATO, filas)
+
+
+# ==========================================================================
+# 3. Disponibilidad y movilidad (can_mov)
+# ==========================================================================
+_SI = "= 'S'"
+_N_DISP = (f"(CASE WHEN c.CandidatoZafrales = 'S' THEN 1 ELSE 0 END + CASE WHEN c.CandidatoHorarioRotativo = 'S' THEN 1 ELSE 0 END "
+           f"+ CASE WHEN c.CandidatoDisponibilidadHoraria = 'S' THEN 1 ELSE 0 END)")
+_FLEX = ["Muy flexible (3/3)", "Flexible (2/3)", "Poco flexible (1/3)", "Rígido (0/3)"]
+_CASE_FLEX = (f"CASE WHEN {_N_DISP} = 3 THEN '{_FLEX[0]}' WHEN {_N_DISP} = 2 THEN '{_FLEX[1]}' "
+              f"WHEN {_N_DISP} = 1 THEN '{_FLEX[2]}' ELSE '{_FLEX[3]}' END")
+_CAMPOS_DISP = [("Libreta", "c.CandidatoLibretaConducir"), ("Zafrales", "c.CandidatoZafrales"),
+                ("Rotativo", "c.CandidatoHorarioRotativo"), ("Disp. horaria", "c.CandidatoDisponibilidadHoraria")]
+_CASE_COMBO = " + ".join(f"CASE WHEN {col} = 'S' THEN '{nom} · ' ELSE '' END" for nom, col in _CAMPOS_DISP)
+COLUMNAS_DISP = ["Candidato Id", "Candidato", "Perfil", "País", "Libreta", "Zafrales", "Rotativo", "Disp. horaria"]
+
+
+def _candidatos_disp(filtros, condicion, params=None, joins=""):
+    w, p = where(filtros)
+    return sgo.filas(f"""
+        SELECT TOP 500 c.CandidatoId, {NOMBRE} AS candidato, RTRIM(pc.PerfilCandidatoDescripcion) AS perfil, RTRIM(pa.PaisNombre) AS pais,
+               CASE WHEN c.CandidatoLibretaConducir = 'S' THEN 'Sí' ELSE 'No' END AS libreta,
+               CASE WHEN c.CandidatoZafrales = 'S' THEN 'Sí' ELSE 'No' END AS zafrales,
+               CASE WHEN c.CandidatoHorarioRotativo = 'S' THEN 'Sí' ELSE 'No' END AS rotativo,
+               CASE WHEN c.CandidatoDisponibilidadHoraria = 'S' THEN 'Sí' ELSE 'No' END AS disp_horaria
+        FROM dbo.Candidatos c LEFT JOIN dbo.PerfilesCandidatos pc ON c.PerfilCandidatoId = pc.PerfilCandidatoId
+        LEFT JOIN dbo.Paises pa ON c.CandidatoResidenciaId = pa.PaisId {joins}
+        WHERE {w} AND ({condicion}) ORDER BY c.CandidatoApellido, c.CandidatoNombre""", p + list(params or []))
+
+
+@catalogo.registrar(
+    "disponibilidad", "Disponibilidad y movilidad",
+    "Quiénes tienen libreta, aceptan zafrales, horario rotativo o disponibilidad total, y qué tan flexibles son.",
+    usa_periodo=False, icono="bi-car-front", filtros=[s.F_PERFIL, s.F_PAIS, s.F_DEPTO, s.F_LIBRETA],
+)
+def disponibilidad(periodo, filtros):
+    w, p = where(filtros)
+    k = sgo.fila(f"""
+        SELECT COUNT(*) AS total_candidatos, SUM(CASE WHEN c.CandidatoLibretaConducir = 'S' THEN 1 ELSE 0 END) AS con_libreta,
+               SUM(CASE WHEN c.CandidatoZafrales = 'S' THEN 1 ELSE 0 END) AS acepta_zafrales,
+               SUM(CASE WHEN c.CandidatoHorarioRotativo = 'S' THEN 1 ELSE 0 END) AS acepta_rotativo,
+               SUM(CASE WHEN c.CandidatoDisponibilidadHoraria = 'S' THEN 1 ELSE 0 END) AS disponibilidad_total,
+               SUM(CASE WHEN c.CandidatoLibretaConducir = 'S' AND {_N_DISP} = 3 THEN 1 ELSE 0 END) AS super_flexibles
+        FROM dbo.Candidatos c WHERE {w}""", p)
+    libretas = sgo.filas(f"""
+        SELECT RTRIM(cl.CategoriaLibretaConducirDescri) AS label, COUNT(*) AS value
+        FROM dbo.Candidatos c INNER JOIN dbo.CategoriasLibretaConducir cl ON c.CategoriaLibretaConducirId = cl.CategoriaLibretaConducirId
+        WHERE {w} AND c.CandidatoLibretaConducir = 'S'
+        GROUP BY cl.CategoriaLibretaConducirId, cl.CategoriaLibretaConducirDescri ORDER BY value DESC""", p)
+    flex = _orden(sgo.filas(f"SELECT {_CASE_FLEX} AS label, COUNT(*) AS value FROM dbo.Candidatos c WHERE {w} GROUP BY {_CASE_FLEX}", p), _FLEX)
+    por_perfil = sgo.filas(f"""
+        SELECT TOP 10 RTRIM(pc.PerfilCandidatoDescripcion) AS label, COUNT(*) AS total_candidatos,
+               SUM(CASE WHEN c.CandidatoLibretaConducir = 'S' THEN 1 ELSE 0 END) AS con_libreta,
+               SUM(CASE WHEN c.CandidatoZafrales = 'S' THEN 1 ELSE 0 END) AS zafrales,
+               SUM(CASE WHEN c.CandidatoHorarioRotativo = 'S' THEN 1 ELSE 0 END) AS rotativo,
+               SUM(CASE WHEN c.CandidatoDisponibilidadHoraria = 'S' THEN 1 ELSE 0 END) AS disp_horaria,
+               ROUND(CAST(SUM(CASE WHEN c.CandidatoLibretaConducir = 'S' THEN 1 ELSE 0 END) AS FLOAT) / COUNT(*) * 100, 1) AS pct_libreta
+        FROM dbo.Candidatos c {JOIN_PERFIL} WHERE {w}
+        GROUP BY pc.PerfilCandidatoId, pc.PerfilCandidatoDescripcion HAVING COUNT(*) >= 10 ORDER BY pct_libreta DESC""", p)
+    combos = sgo.filas(f"""
+        SELECT TOP 6 {_CASE_COMBO} AS label, COUNT(*) AS value FROM dbo.Candidatos c
+        WHERE {w} AND (c.CandidatoLibretaConducir = 'S' OR c.CandidatoZafrales = 'S' OR c.CandidatoHorarioRotativo = 'S'
+                       OR c.CandidatoDisponibilidadHoraria = 'S')
+        GROUP BY {_CASE_COMBO} HAVING COUNT(*) >= 5 ORDER BY value DESC""", p)
+    for r in combos:
+        r["label"] = str(r["label"]).strip().rstrip("·").strip() or "Sin datos"
+    paises = sgo.filas(f"""
+        SELECT TOP 10 RTRIM(pa.PaisNombre) AS label, COUNT(*) AS total_candidatos,
+               SUM(CASE WHEN c.CandidatoLibretaConducir = 'S' THEN 1 ELSE 0 END) AS con_libreta,
+               ROUND(CAST(SUM(CASE WHEN c.CandidatoLibretaConducir = 'S' THEN 1 ELSE 0 END) AS FLOAT) / COUNT(*) * 100, 1) AS pct_libreta
+        FROM dbo.Candidatos c INNER JOIN dbo.Paises pa ON c.CandidatoResidenciaId = pa.PaisId
+        WHERE {w} GROUP BY pa.PaisId, pa.PaisNombre HAVING COUNT(*) >= 10 ORDER BY total_candidatos DESC""", p)
+
+    total_c = num(k.get("total_candidatos"))
+    general = [("Con libreta", num(k.get("con_libreta"))), ("Zafrales", num(k.get("acepta_zafrales"))),
+               ("Horario rotativo", num(k.get("acepta_rotativo"))), ("Disponibilidad horaria", num(k.get("disponibilidad_total")))]
+    secciones = [
+        seccion("Distribución de disponibilidades", [f"{pct(proporcion(v, total_c))} {e.lower()}." for e, v in general[:2]],
+                g.columnas([e for e, _ in general], {"Candidatos": [v for _, v in general]}, rotar=0),
+                explicacion="Candidatos que tienen libreta de conducir, aceptan trabajos zafrales, horario rotativo o tienen "
+                            "disponibilidad horaria total. Un candidato puede estar en varias barras.",
+                detalle="general", ayuda_detalle="Hacé clic en una barra para ver esos candidatos."),
+        seccion("Nivel de flexibilidad", [lider(flex, "label", "value", "candidatos")],
+                g.columnas(etiquetas(flex), {"Candidatos": valores(flex, "value")}, rotar=0, colores=[g.SERIES[2]]),
+                explicacion="Cuántas de las tres disponibilidades (zafrales, rotativo, horaria) acepta cada candidato.",
+                detalle="flexibilidad", ayuda_detalle="Hacé clic en un nivel para ver esos candidatos."),
+        seccion("Categorías de libreta de conducir", [lider(libretas, "label", "value", "candidatos")],
+                g.ranking(etiquetas(libretas), valores(libretas, "value"), "Candidatos", g.SERIES[1]), alto=g.alto_ranking(len(libretas), 200),
+                explicacion="Categoría de libreta de los candidatos que tienen libreta.", detalle="libreta",
+                ayuda_detalle="Hacé clic en una categoría para ver esos candidatos."),
+        seccion("Combinaciones más comunes", [lider(combos, "label", "value", "candidatos")],
+                g.ranking(etiquetas(combos), valores(combos, "value"), "Candidatos", g.SERIES[3]), alto=g.alto_ranking(len(combos), 200),
+                explicacion="Combinaciones de disponibilidades más frecuentes entre los que tienen al menos una.", detalle="combinacion",
+                ayuda_detalle="Hacé clic en una combinación para ver esos candidatos."),
+        seccion("Disponibilidad por perfil (top 10 por % con libreta)", [],
+                g.columnas(etiquetas(por_perfil), {"Libreta": valores(por_perfil, "con_libreta"), "Zafrales": valores(por_perfil, "zafrales"),
+                                                   "Rotativo": valores(por_perfil, "rotativo"),
+                                                   "Disp. horaria": valores(por_perfil, "disp_horaria")}), alto=360,
+                explicacion="Para los 10 perfiles (10+ candidatos) con mayor % de libreta: cuántos candidatos tienen cada disponibilidad.",
+                detalle="perfil", ayuda_detalle="Hacé clic en un perfil para ver sus candidatos."),
+        seccion("Movilidad por país de residencia", [extremos(paises, "label", "pct_libreta", pct, "mayor % con libreta", "menor")],
+                g.ranking(etiquetas(paises), valores(paises, "pct_libreta"), "% con libreta", formato="fmt:pct"),
+                alto=g.alto_ranking(len(paises), 200),
+                explicacion="Parte de los candidatos de cada país (10 o más) que tiene libreta de conducir.", detalle="pais",
+                ayuda_detalle="Hacé clic en un país para ver sus candidatos."),
+    ]
+    return {
+        "kpis": [
+            kpi("Total candidatos", entero(total_c)),
+            kpi("Con libreta", entero(k.get("con_libreta")), pct(proporcion(k.get("con_libreta"), total_c))),
+            kpi("Aceptan zafrales", entero(k.get("acepta_zafrales")), pct(proporcion(k.get("acepta_zafrales"), total_c))),
+            kpi("Aceptan rotativo", entero(k.get("acepta_rotativo")), pct(proporcion(k.get("acepta_rotativo"), total_c))),
+            kpi("Disponibilidad horaria", entero(k.get("disponibilidad_total")), pct(proporcion(k.get("disponibilidad_total"), total_c))),
+            kpi("Súper flexibles", entero(k.get("super_flexibles")), "las 4 disponibilidades",
+                "Tienen libreta y aceptan zafrales, rotativo y disponibilidad horaria."),
+        ],
+        "conclusiones": [
+            f"{pct(proporcion(k.get('con_libreta'), total_c))} tiene libreta y {pct(proporcion(k.get('acepta_zafrales'), total_c))} acepta zafrales.",
+            f"{entero(k.get('super_flexibles'))} candidatos cumplen las cuatro disponibilidades.",
+            lider(flex, "label", "value", "candidatos"),
+        ],
+        "secciones": secciones,
+        "sugerencias": ["¿Cuántos candidatos aceptan zafrales y rotativo?", "¿Qué perfiles tienen más libreta?"],
+        "contexto_ia": {"kpis": k, "flexibilidad": flex, "libretas": libretas, "combinaciones": combos},
+    }
+
+
+@catalogo.detalle("disponibilidad")
+def detalle_disponibilidad(clave, valor, serie, periodo, filtros):
+    params, joins = [], ""
+    if clave == "general":
+        condicion = {"Con libreta": "c.CandidatoLibretaConducir = 'S'", "Zafrales": "c.CandidatoZafrales = 'S'",
+                     "Horario rotativo": "c.CandidatoHorarioRotativo = 'S'"}.get(valor, "c.CandidatoDisponibilidadHoraria = 'S'")
+    elif clave == "flexibilidad":
+        condicion = f"{_N_DISP} = %s"
+        params = [3 - _FLEX.index(valor) if valor in _FLEX else -1]
+    elif clave == "libreta":
+        condicion = "c.CandidatoLibretaConducir = 'S' AND RTRIM(cl.CategoriaLibretaConducirDescri) = %s"
+        params = [valor]
+        joins = "LEFT JOIN dbo.CategoriasLibretaConducir cl ON c.CategoriaLibretaConducirId = cl.CategoriaLibretaConducirId"
+    elif clave == "combinacion":
+        partes = [x.strip() for x in valor.split("·")]
+        condicion = " AND ".join(f"{col} = 'S'" if nom in partes else f"({col} != 'S' OR {col} IS NULL)" for nom, col in _CAMPOS_DISP)
+    elif clave == "perfil":
+        condicion, params = "RTRIM(pc.PerfilCandidatoDescripcion) = %s", [valor]
+        if serie:
+            col = dict((n if n != "Disp. horaria" else "Disp. horaria", c) for n, c in _CAMPOS_DISP).get(serie)
+            if col:
+                condicion += f" AND {col} = 'S'"
+    else:
+        condicion, params = "RTRIM(pa.PaisNombre) = %s", [valor]
+    return respuesta_detalle(f"Candidatos · {valor}" + (f" · {serie}" if clave == "perfil" and serie else ""), COLUMNAS_DISP,
+                             _candidatos_disp(filtros, condicion, params, joins))
+
+
+# ==========================================================================
+# 4. Análisis geográfico (can_geo)
+# ==========================================================================
+COLUMNAS_GEO = ["Candidato Id", "Candidato", "Perfil", "Departamento", "Localidad", "Nacionalidad", "Residencia"]
+
+
+def _candidatos_geo(filtros, condicion, params):
+    w, p = where(filtros)
+    return sgo.filas(f"""
+        SELECT TOP 500 c.CandidatoId, {NOMBRE} AS candidato, RTRIM(pc.PerfilCandidatoDescripcion) AS perfil,
+               RTRIM(d.DepartamentoNombre) AS departamento, RTRIM(l.LocalidadNombre) AS localidad,
+               RTRIM(pn.PaisNombre) AS nacionalidad, RTRIM(pr.PaisNombre) AS residencia
+        FROM dbo.Candidatos c LEFT JOIN dbo.PerfilesCandidatos pc ON c.PerfilCandidatoId = pc.PerfilCandidatoId
+        LEFT JOIN dbo.Departamentos d ON c.CandidatoDepartamentoId = d.DepartamentoId
+        LEFT JOIN dbo.Localidades l ON c.CandidatoLocalidadId = l.LocalidadId
+        LEFT JOIN dbo.Paises pn ON c.CandidatoNacionalidadId = pn.PaisId
+        LEFT JOIN dbo.Paises pr ON c.CandidatoResidenciaId = pr.PaisId
+        WHERE {w} AND ({condicion}) ORDER BY c.CandidatoApellido, c.CandidatoNombre""", p + list(params))
+
+
+@catalogo.registrar(
+    "geografico", "Análisis geográfico",
+    "Dónde viven los candidatos: departamentos, localidades, nacionalidades, país de residencia y movilidad internacional.",
+    usa_periodo=False, icono="bi-geo-alt", filtros=[s.F_PERFIL, s.F_DEPTO, s.F_PAIS],
+)
+def geografico(periodo, filtros):
+    w, p = where(filtros)
+    k = sgo.fila(f"""
+        SELECT COUNT(*) AS total_candidatos, COUNT(DISTINCT c.CandidatoDepartamentoId) AS departamentos_distintos,
+               COUNT(DISTINCT c.CandidatoLocalidadId) AS localidades_distintas, COUNT(DISTINCT c.CandidatoNacionalidadId) AS nacionalidades_distintas,
+               COUNT(DISTINCT c.CandidatoResidenciaId) AS paises_residencia_distintos,
+               COUNT(DISTINCT CASE WHEN c.CandidatoResidenciaId != c.CandidatoNacionalidadId THEN c.CandidatoId END) AS extranjeros_residentes
+        FROM dbo.Candidatos c WHERE {w}""", p)
+    deptos = sgo.filas(f"""
+        SELECT TOP 15 RTRIM(d.DepartamentoNombre) AS label, COUNT(*) AS value, COUNT(DISTINCT c.CandidatoLocalidadId) AS localidades
+        FROM dbo.Candidatos c INNER JOIN dbo.Departamentos d ON c.CandidatoDepartamentoId = d.DepartamentoId
+        WHERE {w} GROUP BY d.DepartamentoId, d.DepartamentoNombre ORDER BY value DESC""", p)
+    localidades = sgo.filas(f"""
+        SELECT TOP 20 RTRIM(l.LocalidadNombre) AS label, RTRIM(d.DepartamentoNombre) AS departamento, COUNT(*) AS value
+        FROM dbo.Candidatos c INNER JOIN dbo.Localidades l ON c.CandidatoLocalidadId = l.LocalidadId
+        LEFT JOIN dbo.Departamentos d ON c.CandidatoDepartamentoId = d.DepartamentoId
+        WHERE {w} GROUP BY l.LocalidadId, l.LocalidadNombre, d.DepartamentoNombre ORDER BY value DESC""", p)
+    nac_res = sgo.filas(f"""
+        SELECT TOP 10 RTRIM(pn.PaisNombre) AS nacionalidad, RTRIM(pr.PaisNombre) AS residencia, COUNT(*) AS cantidad
+        FROM dbo.Candidatos c INNER JOIN dbo.Paises pn ON c.CandidatoNacionalidadId = pn.PaisId
+        INNER JOIN dbo.Paises pr ON c.CandidatoResidenciaId = pr.PaisId
+        WHERE {w} GROUP BY pn.PaisNombre, pr.PaisNombre HAVING COUNT(*) >= 3 ORDER BY cantidad DESC""", p)
+    nacionalidades = sgo.filas(f"""
+        SELECT TOP 10 RTRIM(pa.PaisNombre) AS label, COUNT(*) AS value
+        FROM dbo.Candidatos c INNER JOIN dbo.Paises pa ON c.CandidatoNacionalidadId = pa.PaisId
+        WHERE {w} GROUP BY pa.PaisId, pa.PaisNombre ORDER BY value DESC""", p)
+    residencias = sgo.filas(f"""
+        SELECT TOP 10 RTRIM(pa.PaisNombre) AS label, COUNT(*) AS value, COUNT(DISTINCT c.CandidatoNacionalidadId) AS nacionalidades_diferentes
+        FROM dbo.Candidatos c INNER JOIN dbo.Paises pa ON c.CandidatoResidenciaId = pa.PaisId
+        WHERE {w} GROUP BY pa.PaisId, pa.PaisNombre ORDER BY value DESC""", p)
+    movilidad = sgo.filas(f"""
+        SELECT CASE WHEN c.CandidatoResidenciaId = c.CandidatoNacionalidadId THEN 'Mismo país' ELSE 'País diferente' END AS label,
+               COUNT(*) AS value
+        FROM dbo.Candidatos c WHERE {w}
+        GROUP BY CASE WHEN c.CandidatoResidenciaId = c.CandidatoNacionalidadId THEN 'Mismo país' ELSE 'País diferente' END""", p)
+
+    total_c = num(k.get("total_candidatos"))
+    top5 = total(sorted(deptos, key=lambda r: -num(r["value"]))[:5], "value")
+    secciones = [
+        seccion("Top 15 departamentos", [lider(deptos, "label", "value", "candidatos", "el top 15")],
+                g.ranking(etiquetas(deptos), valores(deptos, "value"), "Candidatos"), alto=g.alto_ranking(len(deptos)),
+                explicacion="Departamento de residencia del candidato.", detalle="departamento",
+                ayuda_detalle="Hacé clic en un departamento para ver sus candidatos."),
+        seccion("Top 20 localidades", [lider(localidades, "label", "value", "candidatos", "el top 20")],
+                g.ranking([f"{r['label']} ({r['departamento']})" if r.get("departamento") else r["label"] for r in localidades],
+                          valores(localidades, "value"), "Candidatos", g.SERIES[1]), alto=g.alto_ranking(len(localidades)),
+                explicacion="Localidad de residencia, con su departamento entre paréntesis.", detalle="localidad",
+                ayuda_detalle="Hacé clic en una localidad para ver sus candidatos."),
+        seccion("Distribución por nacionalidad", [lider(nacionalidades, "label", "value", "candidatos")],
+                g.ranking(etiquetas(nacionalidades), valores(nacionalidades, "value"), "Candidatos", g.SERIES[2]),
+                alto=g.alto_ranking(len(nacionalidades), 200), explicacion="País de nacionalidad.", detalle="nacionalidad",
+                ayuda_detalle="Hacé clic en una nacionalidad para ver esos candidatos."),
+        seccion("Países de residencia actual", [lider(residencias, "label", "value", "candidatos")],
+                g.ranking(etiquetas(residencias), valores(residencias, "value"), "Candidatos", g.SERIES[3]),
+                alto=g.alto_ranking(len(residencias), 200), explicacion="País donde vive hoy el candidato.", detalle="residencia",
+                ayuda_detalle="Hacé clic en un país para ver esos candidatos."),
+        seccion("Movilidad geográfica internacional",
+                [f"{entero(k.get('extranjeros_residentes'))} candidatos viven en un país distinto al de su nacionalidad."],
+                g.torta([(r["label"], num(r["value"])) for r in movilidad], colores=[g.SERIES[0], g.SERIES[1]]),
+                explicacion="Compara el país de residencia con el de nacionalidad.",
+                tabla=tabla("Nacionalidad → residencia (top 10)", ["Nacionalidad", "Residencia", "Candidatos"],
+                            [[r["nacionalidad"], r["residencia"], entero(r["cantidad"])] for r in nac_res])),
+        seccion("Concentración geográfica (top 5 departamentos)",
+                [f"Los 5 departamentos con más candidatos concentran el {pct(proporcion(top5, total_c))} del total."],
+                g.torta([("Top 5 departamentos", top5), ("Resto", max(0, total_c - top5))], colores=[g.SERIES[0], g.NEUTRO]),
+                explicacion="Qué parte de los candidatos vive en los 5 departamentos principales."),
+    ]
+    return {
+        "kpis": [
+            kpi("Total candidatos", entero(total_c)),
+            kpi("Departamentos", entero(k.get("departamentos_distintos"))),
+            kpi("Localidades", entero(k.get("localidades_distintas"))),
+            kpi("Nacionalidades", entero(k.get("nacionalidades_distintas"))),
+            kpi("Países de residencia", entero(k.get("paises_residencia_distintos"))),
+            kpi("Extranjeros residentes", entero(k.get("extranjeros_residentes")), pct(proporcion(k.get("extranjeros_residentes"), total_c))),
+        ],
+        "conclusiones": [
+            lider(deptos, "label", "value", "candidatos", "el top 15"),
+            f"Los 5 departamentos principales concentran el {pct(proporcion(top5, total_c))} de los candidatos.",
+            f"{entero(k.get('extranjeros_residentes'))} candidatos residen fuera de su país de nacionalidad.",
+        ],
+        "secciones": secciones,
+        "sugerencias": ["¿Dónde se concentran los candidatos?", "¿Cuántos candidatos extranjeros hay?"],
+        "contexto_ia": {"kpis": k, "departamentos": deptos, "nacionalidades": nacionalidades},
+    }
+
+
+@catalogo.detalle("geografico")
+def detalle_geografico(clave, valor, serie, periodo, filtros):
+    if clave == "localidad":
+        valor_l = valor.split(" (")[0]
+        condicion, params = "RTRIM(l.LocalidadNombre) = %s", [valor_l]
+    else:
+        columna = {"departamento": "d.DepartamentoNombre", "nacionalidad": "pn.PaisNombre"}.get(clave, "pr.PaisNombre")
+        condicion, params = f"RTRIM({columna}) = %s", [valor]
+    return respuesta_detalle(f"Candidatos · {valor}", COLUMNAS_GEO, _candidatos_geo(filtros, condicion, params))
+
+
+# ==========================================================================
+# 5. Experiencia y trayectoria (can_exp)
+# ==========================================================================
+_CALIF = "(CAST(e.EntrevistaPuntajeFormacion AS FLOAT) + CAST(e.EntrevistaPuntajeExperiencia AS FLOAT))"
+_N_ENT = "(SELECT COUNT(*) FROM dbo.Entrevistas ez WHERE ez.CandidatoId = c.CandidatoId)"
+_RANGOS_ENT = [("Sin entrevistas", "= 0"), ("1 entrevista", "= 1"), ("2-3 entrevistas", "BETWEEN 2 AND 3"),
+               ("4-5 entrevistas", "BETWEEN 4 AND 5"), ("6-10 entrevistas", "BETWEEN 6 AND 10"), ("Más de 10", "> 10")]
+_RANGOS_CALIF = [("Excelente (9-10)", 9, 10), ("Bueno (7-8)", 7, 8.99), ("Regular (5-6)", 5, 6.99), ("Bajo (3-4)", 3, 4.99),
+                 ("Muy bajo (0-2)", 0, 2.99)]
+COLUMNAS_EXP = ["Candidato Id", "Candidato", "Perfil", "Entrevistas", "Calificación promedio"]
+
+
+@catalogo.registrar(
+    "experiencia", "Experiencia y trayectoria",
+    "Cuántas entrevistas tuvo cada candidato, qué calificaciones obtuvo, por perfil, y cómo evolucionó en los últimos años.",
+    usa_periodo=False, icono="bi-briefcase", filtros=[s.F_PERFIL, s.F_PAIS, s.F_DEPTO, s.F_EXPERIENCIA],
+)
+def experiencia(periodo, filtros):
+    w, p = where(filtros)
+    total_c = num(sgo.valor(f"SELECT COUNT(*) AS total FROM dbo.Candidatos c WHERE {w}", p))
+    k = sgo.fila(f"""
+        SELECT COUNT(DISTINCT e.CandidatoId) AS candidatos_entrevistados, AVG({_CALIF}) AS calificacion_promedio,
+               COUNT(*) AS total_entrevistas
+        FROM dbo.Entrevistas e INNER JOIN dbo.Candidatos c ON e.CandidatoId = c.CandidatoId WHERE {w}""", p)
+    case_r = "CASE " + " ".join(f"WHEN cnt {c} THEN '{e}'" for e, c in _RANGOS_ENT[:-1]) + " ELSE 'Más de 10' END"
+    rangos = _orden(sgo.filas(f"""
+        SELECT {case_r} AS label, COUNT(*) AS value
+        FROM (SELECT c.CandidatoId, COUNT(e.EntrevistaId) AS cnt FROM dbo.Candidatos c
+              LEFT JOIN dbo.Entrevistas e ON c.CandidatoId = e.CandidatoId WHERE {w} GROUP BY c.CandidatoId) x
+        GROUP BY {case_r}""", p), [e for e, _ in _RANGOS_ENT])
+    case_c = "CASE " + " ".join(f"WHEN {_CALIF} >= {mn} THEN '{e}'" for e, mn, _ in _RANGOS_CALIF[:-1]) + " ELSE 'Muy bajo (0-2)' END"
+    califs = _orden(sgo.filas(f"""
+        SELECT {case_c} AS label, COUNT(*) AS value FROM dbo.Entrevistas e INNER JOIN dbo.Candidatos c ON e.CandidatoId = c.CandidatoId
+        WHERE {w} GROUP BY {case_c}""", p), [e for e, _, _ in _RANGOS_CALIF][::-1])
+    por_perfil = sgo.filas(f"""
+        SELECT TOP 15 RTRIM(pc.PerfilCandidatoDescripcion) AS label, COUNT(DISTINCT c.CandidatoId) AS candidatos,
+               COUNT(e.EntrevistaId) AS entrevistas, AVG({_CALIF}) AS calificacion_promedio
+        FROM dbo.Candidatos c {JOIN_PERFIL} INNER JOIN dbo.Entrevistas e ON c.CandidatoId = e.CandidatoId
+        WHERE {w} GROUP BY pc.PerfilCandidatoId, pc.PerfilCandidatoDescripcion HAVING COUNT(e.EntrevistaId) >= 5
+        ORDER BY calificacion_promedio DESC""", p)
+    top = sgo.filas(f"""
+        SELECT TOP 20 {NOMBRE} AS label, RTRIM(pc.PerfilCandidatoDescripcion) AS perfil, COUNT(e.EntrevistaId) AS total_entrevistas,
+               AVG({_CALIF}) AS calificacion_promedio
+        FROM dbo.Candidatos c {JOIN_PERFIL} INNER JOIN dbo.Entrevistas e ON c.CandidatoId = e.CandidatoId
+        WHERE {w} GROUP BY c.CandidatoId, c.CandidatoNombre, c.CandidatoApellido, pc.PerfilCandidatoDescripcion
+        ORDER BY total_entrevistas DESC""", p)
+    evolucion = sgo.filas(f"""
+        SELECT YEAR(e.EntrevistaFecha) AS anio, COUNT(*) AS cantidad_entrevistas, COUNT(DISTINCT e.CandidatoId) AS candidatos_unicos
+        FROM dbo.Entrevistas e INNER JOIN dbo.Candidatos c ON e.CandidatoId = c.CandidatoId
+        WHERE {w} AND e.EntrevistaFecha IS NOT NULL GROUP BY YEAR(e.EntrevistaFecha)
+        HAVING YEAR(e.EntrevistaFecha) >= YEAR(GETDATE()) - 5 ORDER BY anio""", p)
+
+    entrevistados = num(k.get("candidatos_entrevistados"))
+    secciones = [
+        seccion("Distribución por cantidad de entrevistas", [lider(rangos, "label", "value", "candidatos")],
+                g.columnas(etiquetas(rangos), {"Candidatos": valores(rangos, "value")}, rotar=0),
+                explicacion="Candidatos según cuántas entrevistas tuvieron en Manpower.", detalle="rango",
+                ayuda_detalle="Hacé clic en un rango para ver esos candidatos."),
+        seccion("Distribución de calificaciones", [lider(califs, "label", "value", "entrevistas")],
+                g.columnas(etiquetas(califs), {"Entrevistas": valores(califs, "value")}, rotar=0, colores=[g.SERIES[2]]),
+                explicacion="Entrevistas según su calificación total (formación + experiencia, de 2 a 10).", detalle="calificacion",
+                ayuda_detalle="Hacé clic en un rango para ver los candidatos con ese promedio."),
+        seccion("Calificación promedio por perfil", [extremos(por_perfil, "label", "calificacion_promedio", decimal, "mejor", "peor")],
+                g.ranking(etiquetas(por_perfil), valores(por_perfil, "calificacion_promedio"), "Calificación", g.SERIES[1]),
+                alto=g.alto_ranking(len(por_perfil)),
+                explicacion="Calificación promedio de las entrevistas de cada perfil (5 entrevistas o más).", detalle="perfil",
+                ayuda_detalle="Hacé clic en un perfil para ver sus candidatos."),
+        seccion("Evolución de las entrevistas (últimos 5 años)", [],
+                g.columnas([str(int(num(r["anio"]))) for r in evolucion], {"Entrevistas": valores(evolucion, "cantidad_entrevistas"),
+                                                                          "Candidatos únicos": valores(evolucion, "candidatos_unicos")}, rotar=0),
+                explicacion="Entrevistas y candidatos distintos entrevistados por año."),
+        seccion("Top 20 candidatos más entrevistados", [],
+                tabla=tabla("Más entrevistados", ["Candidato", "Perfil", "Entrevistas", "Calificación promedio"],
+                            [[r["label"], r["perfil"], entero(r["total_entrevistas"]), decimal(r["calificacion_promedio"])] for r in top]),
+                explicacion="Candidatos con más entrevistas registradas."),
+    ]
+    return {
+        "kpis": [
+            kpi("Total candidatos", entero(total_c)),
+            kpi("Con entrevistas", entero(entrevistados), pct(proporcion(entrevistados, total_c))),
+            kpi("Total entrevistas", entero(k.get("total_entrevistas"))),
+            kpi("Calificación promedio", decimal(k.get("calificacion_promedio")), "de 2 a 10"),
+            kpi("Entrevistas por candidato", decimal(proporcion(k.get("total_entrevistas"), entrevistados) / 100, 1), "promedio"),
+        ],
+        "conclusiones": [
+            f"{pct(proporcion(entrevistados, total_c))} de los candidatos tuvo al menos una entrevista.",
+            f"La calificación promedio es {decimal(k.get('calificacion_promedio'))} sobre 10.",
+            extremos(por_perfil, "label", "calificacion_promedio", decimal, "perfil mejor calificado", "peor"),
+        ],
+        "secciones": secciones,
+        "sugerencias": ["¿Qué perfiles obtienen mejores calificaciones?", "¿Cuántos candidatos nunca fueron entrevistados?"],
+        "contexto_ia": {"rangos": rangos, "calificaciones": califs, "por_perfil": por_perfil},
+    }
+
+
+@catalogo.detalle("experiencia")
+def detalle_experiencia(clave, valor, serie, periodo, filtros):
+    w, p = where(filtros)
+    if clave == "rango":
+        condicion = f"{_N_ENT} " + next((c for e, c in _RANGOS_ENT if e == valor), "= -1")
+        filas = sgo.filas(f"""
+            SELECT TOP 500 c.CandidatoId, {NOMBRE} AS candidato, RTRIM(pc.PerfilCandidatoDescripcion) AS perfil, {_N_ENT} AS entrevistas,
+                   (SELECT AVG(CAST(ez.EntrevistaPuntajeFormacion AS FLOAT) + CAST(ez.EntrevistaPuntajeExperiencia AS FLOAT))
+                    FROM dbo.Entrevistas ez WHERE ez.CandidatoId = c.CandidatoId) AS calificacion
+            FROM dbo.Candidatos c LEFT JOIN dbo.PerfilesCandidatos pc ON c.PerfilCandidatoId = pc.PerfilCandidatoId
+            WHERE {w} AND {condicion} ORDER BY c.CandidatoApellido, c.CandidatoNombre""", p)
+    else:
+        having, extra, params = "", "", list(p)
+        if clave == "calificacion":
+            mn, mx = next(((a, b) for e, a, b in _RANGOS_CALIF if e == valor), (-1, -2))
+            having = f"HAVING AVG({_CALIF}) >= %s AND AVG({_CALIF}) <= %s"
+        else:
+            extra = "AND RTRIM(pc.PerfilCandidatoDescripcion) = %s"
+            params.append(valor)
+        filas = sgo.filas(f"""
+            SELECT TOP 500 c.CandidatoId, {NOMBRE} AS candidato, RTRIM(pc.PerfilCandidatoDescripcion) AS perfil,
+                   COUNT(e.EntrevistaId) AS entrevistas, AVG({_CALIF}) AS calificacion
+            FROM dbo.Candidatos c {JOIN_PERFIL} INNER JOIN dbo.Entrevistas e ON c.CandidatoId = e.CandidatoId
+            WHERE {w} {extra}
+            GROUP BY c.CandidatoId, c.CandidatoNombre, c.CandidatoApellido, pc.PerfilCandidatoDescripcion
+            {having} ORDER BY calificacion DESC""", params + ([mn, mx] if clave == "calificacion" else []))
+    return respuesta_detalle(f"Candidatos · {valor}", COLUMNAS_EXP, filas)

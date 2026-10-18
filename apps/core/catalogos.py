@@ -47,6 +47,10 @@ CONSULTAS = {
     "ClientesAnalitica": "SELECT DISTINCT c.[ClienteId] AS Id, c.[ClienteNombre] AS Descripcion FROM [Clientes] c "
                          "JOIN [analitica_cliente_individual] a ON a.[ClienteId] = c.[ClienteId]",
     "AniosAnalitica": "SELECT DISTINCT [Anio] AS Id, CAST([Anio] AS VARCHAR(4)) AS Descripcion FROM [analitica_cliente_individual]",
+    "Paises": "SELECT [PaisId] AS Id, [PaisNombre] AS Descripcion FROM [Paises]",
+    "CategoriasLibretaConducir": "SELECT [CategoriaLibretaConducirId] AS Id, [CategoriaLibretaConducirDescri] AS Descripcion "
+                                 "FROM [CategoriasLibretaConducir]",
+    "Pruebas": "SELECT [PruebaId] AS Id, [PruebaDescripcion] AS Descripcion FROM [Pruebas]",
     "SituacionesLaborales": "SELECT [SituacionLaboralId] AS Id, [SituacionLaboralNombre] AS Descripcion "
                             "FROM [SituacionesLaborales]",
     "Servicios": "SELECT [ServicioId] AS Id, [ServicioDescripcion] AS Descripcion FROM [Servicios]",
@@ -102,6 +106,9 @@ _EJEMPLO = {
     "ClientesAnalitica": {1: "Comercial del Sur", 2: "Industrias Oriental", 3: "Logística Atlántica",
                           4: "Grupo Rioplatense", 5: "Laboratorios Andina"},
     "AniosAnalitica": {2022: "2022", 2023: "2023", 2024: "2024", 2025: "2025", 2026: "2026"},
+    "Paises": {1: "Uruguay", 2: "Argentina", 3: "Brasil", 4: "Venezuela", 5: "Cuba", 6: "Paraguay"},
+    "CategoriasLibretaConducir": {1: "A", 2: "B", 3: "C", 4: "D", 5: "E", 6: "F", 7: "G"},
+    "Pruebas": {1: "Psicotécnico", 2: "Excel", 3: "Inglés", 4: "Atención al cliente", 5: "Lógica"},
     "SituacionesLaborales": {1: "Desocupado", 2: "Empleado", 3: "Estudiante", 4: "Independiente", 5: "Jubilado"},
     "Servicios": {1: "Trabajo temporal", 2: "Selección", 3: "RPO", 4: "Outsourcing", 5: "Evaluación", 6: "Capacitación"},
     "Monedas": {1: "Pesos uruguayos ($)", 2: "Dólares (U$S)"},
