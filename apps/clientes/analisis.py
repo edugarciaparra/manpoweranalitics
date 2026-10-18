@@ -634,3 +634,7 @@ def detalle(clave, valor, serie, periodo):
         "columna_resumen": "Actividad",
         "columna_avatar": "Cliente",
     }
+
+
+# Pantallas de clientes migradas de la analítica del SGO
+from . import analisis_sgo  # noqa: E402,F401

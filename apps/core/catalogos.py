@@ -44,6 +44,9 @@ CONSULTAS = {
                            "JOIN [HistorialViaticos] hv ON hv.[PedidoId] = p.[PedidoId]",
     "AniosViaticos": "SELECT DISTINCT YEAR([HistorialViaticosFecha]) AS Id, CAST(YEAR([HistorialViaticosFecha]) AS VARCHAR(4)) "
                      "AS Descripcion FROM [HistorialViaticos] WHERE [HistorialViaticosFecha] > '1900-01-01'",
+    "ClientesAnalitica": "SELECT DISTINCT c.[ClienteId] AS Id, c.[ClienteNombre] AS Descripcion FROM [Clientes] c "
+                         "JOIN [analitica_cliente_individual] a ON a.[ClienteId] = c.[ClienteId]",
+    "AniosAnalitica": "SELECT DISTINCT [Anio] AS Id, CAST([Anio] AS VARCHAR(4)) AS Descripcion FROM [analitica_cliente_individual]",
     "SituacionesLaborales": "SELECT [SituacionLaboralId] AS Id, [SituacionLaboralNombre] AS Descripcion "
                             "FROM [SituacionesLaborales]",
     "Servicios": "SELECT [ServicioId] AS Id, [ServicioDescripcion] AS Descripcion FROM [Servicios]",
@@ -96,6 +99,9 @@ _EJEMPLO = {
                                  5: "Gallito", 6: "Redes sociales"},
     "ClientesConViaticos": {1: "Comercial del Sur", 2: "Industrias Oriental", 3: "Logística Atlántica"},
     "AniosViaticos": {2024: "2024", 2025: "2025", 2026: "2026"},
+    "ClientesAnalitica": {1: "Comercial del Sur", 2: "Industrias Oriental", 3: "Logística Atlántica",
+                          4: "Grupo Rioplatense", 5: "Laboratorios Andina"},
+    "AniosAnalitica": {2022: "2022", 2023: "2023", 2024: "2024", 2025: "2025", 2026: "2026"},
     "SituacionesLaborales": {1: "Desocupado", 2: "Empleado", 3: "Estudiante", 4: "Independiente", 5: "Jubilado"},
     "Servicios": {1: "Trabajo temporal", 2: "Selección", 3: "RPO", 4: "Outsourcing", 5: "Evaluación", 6: "Capacitación"},
     "Monedas": {1: "Pesos uruguayos ($)", 2: "Dólares (U$S)"},
