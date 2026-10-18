@@ -24,7 +24,7 @@ TABLAS_PERMITIDAS = [
     "Candidatos", "CandidatosWeb", "CVExperiencia", "CVFormacion", "CVIdiomas", "CVAptitudes",
     "CandidatosCompetencias", "CandidatosCategoriaProfesional", "PerfilesCandidatos",
     # Tablas de referencia
-    "Divisiones", "EstadosPedido", "TiposPedido", "EstadosAsignacion", "TiposAsignacion",
+    "Marcas", "Lineas", "CentrosCosto", "Divisiones", "EstadosPedido", "TiposPedido", "EstadosAsignacion", "TiposAsignacion",
     "Servicios", "Monedas", "Psicologos", "CanalesPublicacionAvisos", "CausalesBaja",
     "Departamentos", "Localidades", "Paises", "EstadosCiviles", "NivelesEducativos",
     "SituacionesLaborales", "Competencias", "CategoriasProfesionales", "CategoriasLibretaConducir",
@@ -72,7 +72,9 @@ ESQUEMA_EJEMPLO = {
         ("EstadoPedidoId", "int"), ("TipoPedidoId", "int"), ("PerfilCandidatoId", "int"),
         ("PedidoFecha", "datetime"), ("PedidoFechaTopeEntrega", "datetime"),
         ("PedidoFechaEntregaEfectiva", "datetime"), ("PedidoFechaCierre", "datetime"),
-        ("PedidoCantidadPersonas", "int"),
+        ("PedidoCantidadPersonas", "int"), ("TipoAsignacionId", "int"), ("PedidoDerivado", "char"),
+        ("PedidoTraspaso", "char"), ("MarcaId", "int"), ("LineaId", "int"), ("PracticeAreaId", "int"),
+        ("CentroCostoId", "int"),
     ],
     "Asignaciones": [
         ("AsignacionId", "int"), ("PedidoId", "int"), ("CandidatoId", "int"), ("EstadoAsignacionId", "int"),
@@ -82,12 +84,16 @@ ESQUEMA_EJEMPLO = {
     "Entrevistas": [
         ("EntrevistaId", "int"), ("CandidatoId", "int"), ("EntrevistaPedidoId", "int"),
         ("EntrevistaPsicologoId", "int"), ("EntrevistaCanalPublicacion", "int"), ("EntrevistaFecha", "datetime"),
+        ("EntrevistaEsGrupal", "char"), ("EntrevistaPuntajeFormacion", "varchar"), ("EntrevistaPuntajeExperiencia", "varchar"),
+        ("SituacionLaboralId", "int"), ("EntrevistaResumen", "varchar"),
     ],
     "OrdenesFacturacion": [
         ("OrdenId", "int"), ("PedidoId", "int"), ("OrdenFecha", "datetime"), ("OrdenMonto", "decimal"),
         ("OrdenServicioId", "int"), ("OrdenMonCod", "int"), ("OrdenResponsableId", "int"),
     ],
-    "HistorialViaticos": [("AsignacionId", "int"), ("ViaticosFecha", "datetime"), ("ViaticosImporte", "decimal")],
+    "HistorialViaticos": [("ViaticoId", "int"), ("AsignacionId", "int"), ("PedidoId", "int"),
+                          ("HistorialViaticosFecha", "datetime"), ("HistorialViaticosImporte", "decimal"),
+                          ("HistorialViaticosObs", "varchar")],
     "Candidatos": [
         ("CandidatoId", "int"), ("WebUserId", "int"), ("CandidatoDepartamentoId", "int"),
         ("CandidatoLocalidadId", "int"), ("CandidatoResidenciaId", "int"), ("CandidatoNacionalidadId", "int"),

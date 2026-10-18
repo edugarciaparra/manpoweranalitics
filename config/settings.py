@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     "apps.candidatos",
     "apps.entrevistas",
     "apps.candidatosweb",
+    "apps.viaticos",
 ]
 
 # Módulos de análisis que aparecen en la landing, en este orden.
@@ -76,6 +77,7 @@ MODULOS_ANALISIS = [
     "apps.candidatosweb",
     # "apps.candidatos",  # fuera del menú por ahora
     "apps.entrevistas",
+    "apps.viaticos",
 ]
 
 MIDDLEWARE = [

@@ -12,13 +12,17 @@ Pedidos.DivisionId = Divisiones.DivisionId
 Pedidos.EstadoPedidoId = EstadosPedido.EstadoPedidoId
 Pedidos.TipoPedidoId = TiposPedido.TipoPedidoId
 Pedidos.PerfilCandidatoId = PerfilesCandidatos.PerfilCandidatoId
+Pedidos.TipoAsignacionId = TiposAsignacion.TipoAsignacionId
+Pedidos.MarcaId = Marcas.MarcaId; Pedidos.LineaId = Lineas.LineaId; Pedidos.PracticeAreaId = PracticeAreas.PracticeAreaId; Pedidos.CentroCostoId = CentrosCosto.CentroCostoId
+Entrevistas.SituacionLaboralId = SituacionesLaborales.SituacionLaboralId
+PedidosPostulante.PedidoId = Pedidos.PedidoId; PedidosPostulante.PostulanteCandidatoId = Candidatos.CandidatoId
 Asignaciones.PedidoId = Pedidos.PedidoId
 Asignaciones.CandidatoId = Candidatos.CandidatoId
 Asignaciones.EstadoAsignacionId = EstadosAsignacion.EstadoAsignacionId
 Asignaciones.TipoAsignacionId = TiposAsignacion.TipoAsignacionId
 Asignaciones.AsignacionEjecutivoId = EjecutivosCuenta.EjecutivoCuentaId
 Asignaciones.CausalBajaId = CausalesBaja.CausalBajaId
-HistorialViaticos.AsignacionId = Asignaciones.AsignacionId
+HistorialViaticos.AsignacionId = Asignaciones.AsignacionId AND HistorialViaticos.PedidoId = Asignaciones.PedidoId (unir por las dos columnas)
 Entrevistas.CandidatoId = Candidatos.CandidatoId
 Entrevistas.EntrevistaPedidoId = Pedidos.PedidoId
 Entrevistas.EntrevistaPsicologoId = Psicologos.PsicologoId
@@ -66,5 +70,11 @@ CODIGOS = """
 - CandidatosWeb no tiene fecha de alta; WebUserFechaAct es la última actualización del registro.
 - Facturación: OrdenesFacturacion.OrdenMonto es el importe; la moneda está en OrdenMonCod (tabla Monedas). No sumar montos de distintas monedas sin separarlos por moneda.
 - Pedido entregado a tiempo: PedidoFechaEntregaEfectiva <= PedidoFechaTopeEntrega.
+- Pedidos.PedidoFechaCierre vacía se guarda como NULL o como '1900-01-01' / '1753-01-01': pedido abierto = cierre NULL o en esas fechas.
+- Pedidos.EstadoPedidoId (como lo usa el SGO): 9 = Finalizado, 8 = Cubierto, 3 = Cancelado, 6 = No cubierto; 7, 2, 4 y 5 son estados abiertos. Mostrar siempre EstadosPedido.EstadoPedidoDescripcion.
+- Pedidos.PedidoDerivado y PedidoTraspaso: 'S' / 'N'. PedidoCantidadPersonas = vacantes pedidas.
+- Entrevistas.EntrevistaEsGrupal: 'S' grupal, 'N' individual. EntrevistaPuntajeFormacion y EntrevistaPuntajeExperiencia son texto con un número de 1 a 5: usar CAST(... AS FLOAT).
+- Candidato contratado después de una entrevista: existe Asignaciones con el mismo CandidatoId y AsignacionFechaIngreso > EntrevistaFecha.
+- Viáticos: HistorialViaticos.HistorialViaticosImporte (monto), HistorialViaticosFecha, HistorialViaticosObs (observación).
 - Asignación vigente: AsignacionFechaEgreso IS NULL.
 """
