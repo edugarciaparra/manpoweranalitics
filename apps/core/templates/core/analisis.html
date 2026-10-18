@@ -33,16 +33,68 @@
         </div>
       </header>
 
+      {% if filtros %}
+      <form method="get" class="filtros" id="filtros">
+        <div class="filtros-cabeza">
+          <button class="filtros-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#filtros-cuerpo"
+                  aria-expanded="{% if filtros_activos %}true{% else %}false{% endif %}" aria-controls="filtros-cuerpo">
+            <i class="bi bi-funnel" aria-hidden="true"></i> Filtros
+            {% if filtros_activos %}<span class="filtros-cuenta">{{ filtros_activos }} activo{{ filtros_activos|pluralize }}</span>{% endif %}
+            <i class="bi bi-chevron-down" aria-hidden="true"></i>
+          </button>
+          {% if filtros_activos %}<a class="filtros-limpiar" href="{{ request.path }}">Limpiar filtros</a>{% endif %}
+        </div>
+        <div class="collapse{% if filtros_activos %} show{% endif %}" id="filtros-cuerpo">
+          <div class="row g-3 filtros-campos">
+            {% for f in filtros %}
+            {% if f.tipo == "varios" %}
+            <fieldset class="col-12 filtro-varios">
+              <legend>{{ f.etiqueta }} <span>(sin marcar = todas)</span></legend>
+              <div class="filtro-chips">
+                {% for o in f.opciones %}
+                <label class="filtro-chip"><input type="checkbox" name="{{ f.nombre }}" value="{{ o.valor }}"{% if o.elegido %} checked{% endif %}><span>{{ o.texto }}</span></label>
+                {% empty %}<span class="filtro-vacio">Sin opciones</span>{% endfor %}
+              </div>
+            </fieldset>
+            {% elif f.tipo == "fecha" %}
+            <div class="col-6 col-md-3 col-xl-2">
+              <label class="filtro-label" for="f-{{ f.nombre }}">{{ f.etiqueta }}</label>
+              <input class="form-control" type="date" id="f-{{ f.nombre }}" name="{{ f.nombre }}" value="{{ f.valor }}">
+            </div>
+            {% elif f.tipo == "numero" %}
+            <div class="col-6 col-md-3 col-xl-2">
+              <label class="filtro-label" for="f-{{ f.nombre }}">{{ f.etiqueta }}</label>
+              <input class="form-control" type="number" min="0" id="f-{{ f.nombre }}" name="{{ f.nombre }}" value="{{ f.valor }}">
+            </div>
+            {% else %}
+            <div class="col-6 col-md-3 col-xl-2">
+              <label class="filtro-label" for="f-{{ f.nombre }}">{{ f.etiqueta }}</label>
+              <select class="form-select" id="f-{{ f.nombre }}" name="{{ f.nombre }}">
+                {% if f.tipo == "uno" %}<option value="">Todos</option>{% endif %}
+                {% for o in f.opciones %}<option value="{{ o.valor }}"{% if o.elegido %} selected{% endif %}>{{ o.texto }}</option>{% endfor %}
+              </select>
+            </div>
+            {% endif %}
+            {% endfor %}
+            <div class="col-12 filtros-acciones">
+              <button type="submit" class="btn-aplicar"><i class="bi bi-check2" aria-hidden="true"></i> Aplicar filtros</button>
+            </div>
+          </div>
+        </div>
+      </form>
+      {% endif %}
+
       <section class="kpis" aria-label="Indicadores principales">
         {% for k in datos.kpis %}
         <div class="kpi{% if k.alerta %} kpi-alerta{% endif %}">
-          <span class="kpi-label">{{ k.label }}</span>
+          <span class="kpi-label">{{ k.label }}{% if k.ayuda %} <i class="bi bi-info-circle kpi-ayuda" data-bs-toggle="tooltip" data-bs-title="{{ k.ayuda }}" tabindex="0" aria-label="{{ k.ayuda }}"></i>{% endif %}</span>
           <span class="kpi-valor">{{ k.valor }}</span>
           <span class="kpi-detalle">{% if k.alerta %}<i class="bi bi-exclamation-circle-fill" aria-label="Atención"></i> {% endif %}{{ k.detalle }}</span>
         </div>
         {% endfor %}
       </section>
 
+      {% if datos.conclusiones %}
       <div class="franja-conclusiones">
         <span class="franja-icono" aria-hidden="true"><i class="bi bi-lightbulb-fill"></i></span>
         <p class="franja-texto"><strong>Conclusión principal:</strong> {{ datos.conclusiones.0 }}</p>
@@ -50,6 +102,7 @@
           Ver las {{ datos.conclusiones|length }} conclusiones <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
         </button>
       </div>
+      {% endif %}
 
       {% if datos.secciones|length > 1 %}
       <nav class="indice" aria-label="Secciones del análisis">

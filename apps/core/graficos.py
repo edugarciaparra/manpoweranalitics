@@ -135,3 +135,119 @@ def serie_pronostico(historia, prono, etiquetas_hist, etiquetas_futuras, nombre=
     if formato:
         opcion["tooltip"]["valueFormatter"] = formato
     return opcion
+
+
+# ---------------------------------------------------------------------------
+# Gráficos rápidos a partir de filas de una consulta (pantallas del SGO)
+# ---------------------------------------------------------------------------
+def alto_ranking(n, minimo=260):
+    """Alto en px para un ranking horizontal de n barras."""
+    return max(minimo, 28 * n + 50)
+
+
+def ranking(etiquetas, valores, nombre="Cantidad", color=None, formato=None):
+    """Barras horizontales, la primera arriba."""
+    return base(
+        tooltip={"trigger": "axis", "axisPointer": {"type": "shadow"}, "confine": True,
+                 **({"valueFormatter": formato} if formato else {})},
+        grid={"left": 8, "right": 28, "top": 8, "bottom": 8, "containLabel": True},
+        yAxis=eje_categorias(list(etiquetas), inverse=True,
+                             axisLabel={"color": TINTA_SUAVE, "width": 190, "overflow": "truncate"}),
+        xAxis=eje_valores(formato),
+        series=[barras(nombre, list(valores), color or SERIES[0], barMaxWidth=22,
+                       itemStyle={"borderRadius": [0, 4, 4, 0], "color": color or SERIES[0]},
+                       label={"show": len(valores) <= 15, "position": "right", "color": TINTA_SUAVE,
+                              "formatter": "lbl:pct" if formato == "fmt:pct" else "lbl:num"})],
+    )
+
+
+def columnas(etiquetas, series, formato=None, apiladas=False, rotar=None, colores=None):
+    """Barras verticales. series = {"nombre": [valores], ...}."""
+    etiquetas = list(etiquetas)
+    rot = rotar if rotar is not None else (30 if len(etiquetas) > 7 else 0)
+    return base(
+        tooltip={"trigger": "axis", "axisPointer": {"type": "shadow"}, "confine": True,
+                 **({"valueFormatter": formato} if formato else {})},
+        legend=leyenda() if len(series) > 1 else {"show": False},
+        grid={"left": 28 if rot else 8, "right": 16, "top": 36 if len(series) > 1 else 16, "bottom": 8,
+              "containLabel": True},
+        xAxis=eje_categorias(etiquetas, axisLabel={"color": TINTA_SUAVE, "interval": 0, "rotate": rot,
+                                                   "width": 110, "overflow": "truncate"}),
+        yAxis=eje_valores(formato),
+        series=[barras(n, list(v), (colores or SERIES)[i % len(colores or SERIES)],
+                       **({"stack": "total"} if apiladas else {}))
+                for i, (n, v) in enumerate(series.items())],
+    )
+
+
+def lineas(etiquetas, series, formato=None, area=False):
+    """Una o más líneas sobre el mismo eje. series = {"nombre": [valores], ...}."""
+    etiquetas = list(etiquetas)
+    return base(
+        tooltip={"trigger": "axis", "confine": True, **({"valueFormatter": formato} if formato else {})},
+        legend=leyenda() if len(series) > 1 else {"show": False},
+        grid={"left": 8, "right": 16, "top": 36 if len(series) > 1 else 16, "bottom": 8, "containLabel": True},
+        xAxis=eje_categorias(etiquetas, boundaryGap=False),
+        yAxis=eje_valores(formato),
+        series=[linea(n, list(v), SERIES[i % len(SERIES)],
+                      **({"areaStyle": {"opacity": .12}} if area else {}))
+                for i, (n, v) in enumerate(series.items())],
+        dataZoom=[{"type": "inside"}] if len(etiquetas) > 36 else [],
+    )
+
+
+def torta(pares, formato=None, colores=None):
+    """Anillo. pares = [(etiqueta, valor), ...]. Usar solo con pocas categorías."""
+    datos = [{"name": str(e), "value": v} for e, v in pares]
+    if colores:
+        for d, c in zip(datos, colores):
+            d["itemStyle"] = {"color": c}
+    return base(
+        tooltip={"trigger": "item", "confine": True},
+        legend=leyenda(type="scroll"),
+        series=[{"type": "pie", "radius": ["45%", "72%"], "center": ["50%", "56%"],
+                 "itemStyle": {"borderColor": "#fff", "borderWidth": 2},
+                 "label": {"formatter": "{b}\n{d}%", "color": TINTA_SUAVE},
+                 "data": datos}],
+    )
+
+
+def embudo(pares):
+    """Embudo de etapas. pares = [(etapa, valor), ...] en orden."""
+    return base(
+        tooltip={"trigger": "item", "confine": True},
+        series=[{"type": "funnel", "left": "10%", "width": "80%", "top": 10, "bottom": 10,
+                 "sort": "none", "gap": 3, "minSize": "18%",
+                 "label": {"show": True, "position": "inside", "formatter": "{b}\n{c}", "color": "#fff",
+                           "fontWeight": 600},
+                 "itemStyle": {"borderColor": "#fff", "borderWidth": 1},
+                 "data": [{"name": str(e), "value": v, "itemStyle": {"color": AZUL[min(len(AZUL) - 1, 6 - i)]}}
+                          for i, (e, v) in enumerate(pares)]}],
+    )
+
+
+def dispersion(puntos, nombre_x, nombre_y, formato_x=None, formato_y=None):
+    """puntos = [(x, y, etiqueta), ...]"""
+    return base(
+        tooltip={"trigger": "item", "confine": True, "formatter": "{b}"},
+        grid={"left": 8, "right": 24, "top": 30, "bottom": 30, "containLabel": True},
+        xAxis=eje_valores(formato_x, name=nombre_x, nameLocation="middle", nameGap=28),
+        yAxis=eje_valores(formato_y, name=nombre_y),
+        series=[{"type": "scatter", "symbolSize": 12, "itemStyle": {"color": SERIES[0], "opacity": .75},
+                 "data": [{"name": str(e), "value": [x, y]} for x, y, e in puntos]}],
+    )
+
+
+def mapa_calor(x, y, valores, formato=None):
+    """valores = [[ix, iy, v], ...]"""
+    maximo = max((v for _, _, v in valores), default=1) or 1
+    return base(
+        tooltip={"trigger": "item", "confine": True},
+        grid={"left": 8, "right": 16, "top": 8, "bottom": 50, "containLabel": True},
+        xAxis=eje_categorias(list(x), splitArea={"show": True}),
+        yAxis=eje_categorias(list(y), splitArea={"show": True}),
+        visualMap={"min": 0, "max": maximo, "calculable": True, "orient": "horizontal", "left": "center",
+                   "bottom": 0, "inRange": {"color": AZUL}, "itemHeight": 120},
+        series=[{"type": "heatmap", "data": valores, "label": {"show": len(valores) <= 120},
+                 "emphasis": {"itemStyle": {"shadowBlur": 6}}}],
+    )

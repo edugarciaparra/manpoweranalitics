@@ -34,6 +34,9 @@ gráfico se abre un modal con los registros. Los arma la función registrada con
         return {"titulo": ..., "columnas": [...], "filas": [[...], ...]}
 
 donde valor es la categoría cliqueada (barra, sector, mes) y serie el nombre de la serie.
+Si el análisis tiene filtros, la función de detalle recibe además filtros=... .
+
+KPIs: {"label", "valor", "detalle" (opcional), "alerta" (opcional), "ayuda" (opcional, cómo se calcula)}.
 """
 
 PRIORIDADES = {
@@ -49,9 +52,10 @@ class Catalogo:
         self._detalles = {}
 
     def registrar(self, slug, titulo, descripcion, usa_periodo=True, icono="bi-graph-up",
-                  periodos=None, periodo_defecto=None):
+                  periodos=None, periodo_defecto=None, filtros=None):
         """usa_periodo=False: el análisis muestra la foto de hoy y no tiene selector de período.
-        periodos / periodo_defecto: opciones propias de período, si no sirven las comunes."""
+        periodos / periodo_defecto: opciones propias de período, si no sirven las comunes.
+        filtros: lista de apps.core.filtros.Filtro; la función recibe (periodo, filtros)."""
         def decorador(funcion):
             self._analisis.append({
                 "slug": slug,
@@ -61,6 +65,7 @@ class Catalogo:
                 "icono": icono,
                 "periodos": periodos,
                 "periodo_defecto": periodo_defecto,
+                "filtros": filtros or [],
                 "funcion": funcion,
             })
             return funcion

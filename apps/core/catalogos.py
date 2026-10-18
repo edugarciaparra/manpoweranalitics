@@ -27,6 +27,18 @@ CONSULTAS = {
     "EjecutivosCuenta": "SELECT [EjecutivoCuentaId] AS Id, "
                         "LTRIM(RTRIM(ISNULL([EjecutivoCuentaNombre], ''))) + ' ' + LTRIM(RTRIM(ISNULL([EjecutivoCuentaApellido], ''))) "
                         "AS Descripcion FROM [EjecutivosCuenta]",
+    # Pedidos, asignaciones, entrevistas y facturación
+    "Divisiones": "SELECT [DivisionId] AS Id, [DivisionDescripcion] AS Descripcion FROM [Divisiones]",
+    "EstadosPedido": "SELECT [EstadoPedidoId] AS Id, [EstadoPedidoDescripcion] AS Descripcion FROM [EstadosPedido]",
+    "TiposPedido": "SELECT [TipoPedidoId] AS Id, [TipoPedidoDescripcion] AS Descripcion FROM [TiposPedido]",
+    "TiposAsignacion": "SELECT [TipoAsignacionId] AS Id, [TipoAsignacionDescripcion] AS Descripcion FROM [TiposAsignacion]",
+    "EstadosAsignacion": "SELECT [EstadoAsignacionId] AS Id, [EstadoAsignacionDescripcion] AS Descripcion FROM [EstadosAsignacion]",
+    "Psicologos": "SELECT [PsicologoId] AS Id, LTRIM(RTRIM(ISNULL([PsicologoNombre], ''))) + ' ' + "
+                  "LTRIM(RTRIM(ISNULL([PsicologoApellido], ''))) AS Descripcion FROM [Psicologos]",
+    "CanalesPublicacionAvisos": "SELECT [CanalPublicacionId] AS Id, [CanalPublicacionDescripcion] AS Descripcion "
+                                "FROM [CanalesPublicacionAvisos]",
+    "PerfilesCandidatos": "SELECT [PerfilCandidatoId] AS Id, [PerfilCandidatoDescripcion] AS Descripcion "
+                          "FROM [PerfilesCandidatos]",
     # Solo las competencias que se usan como idioma en los CV
     "Idiomas": "SELECT DISTINCT c.[CompetenciaId] AS Id, c.[CompetenciaNombre] AS Descripcion "
                "FROM [Competencias] c JOIN [CVIdiomas] i ON i.[CVIdiomaId] = c.[CompetenciaId]",
@@ -58,6 +70,19 @@ _EJEMPLO = {
     "EstadosCliente": {1: "No Especificado", 2: "Activo", 3: "Descartado", 4: "Inactivo", 5: "Perdido",
                        6: "Potencial", 7: "Potencial Apuntado", 8: "Protegido", 9: "No Contactar"},
     "Tendencias": {1: "Creciendo", 2: "Estable", 3: "Bajando"},
+    "Divisiones": {1: "Administrativa", 2: "Profesional", 3: "Industrial", 4: "Logística", 5: "Promociones",
+                   7: "Experis", 8: "RPO", 9: "Retail", 10: "Call center", 11: "Evaluación", 12: "Outsourcing"},
+    "EstadosPedido": {1: "Ingresado", 2: "En proceso", 3: "Cancelado", 4: "Suspendido", 5: "Cubierto parcial",
+                      6: "No cubierto", 7: "Abierto", 8: "Cubierto", 9: "Finalizado"},
+    "TiposPedido": {1: "Temporal", 2: "Efectivo", 3: "Eventual", 4: "Zafral"},
+    "TiposAsignacion": {1: "Temporal", 2: "Efectiva", 3: "Eventual"},
+    "EstadosAsignacion": {1: "Vigente", 2: "Finalizada", 3: "Cancelada"},
+    "Psicologos": {1: "Laura Sosa", 2: "María Fernández", 3: "Carla Pereira", 4: "Valeria López",
+                   5: "Ana Rodríguez", 6: "Gabriela Silva"},
+    "CanalesPublicacionAvisos": {1: "Web Manpower", 2: "LinkedIn", 3: "Computrabajo", 4: "Referidos",
+                                 5: "Gallito", 6: "Redes sociales"},
+    "PerfilesCandidatos": {1: "Operario", 2: "Administrativo", 3: "Vendedor", 4: "Chofer", 5: "Analista",
+                           6: "Promotor", 7: "Cajero"},
     "EjecutivosCuenta": {1: "A. Rodríguez", 2: "M. Fernández", 3: "L. Sosa", 4: "P. Martínez",
                          5: "C. Pereira", 6: "G. Silva", 7: "V. López", 8: "J. Romero"},
 }

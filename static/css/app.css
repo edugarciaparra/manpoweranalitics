@@ -714,3 +714,45 @@ body { background: var(--papel); color: var(--tinta); }
   .nl-yo { max-width: 92%; }
 }
 .nl-compositor textarea::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ==========================================================================
+   Filtros de pantalla e indicadores (pantallas del SGO)
+   ========================================================================== */
+.kpis { grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); }
+.kpi-ayuda { color: var(--mp-azul); cursor: help; font-size: .78rem; opacity: .75; }
+.kpi-ayuda:hover, .kpi-ayuda:focus { opacity: 1; }
+.filtros { background: #fff; border-radius: 1rem; box-shadow: var(--sombra); padding: .55rem .8rem; margin-bottom: 1.1rem; }
+.filtros-cabeza { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.filtros-toggle {
+  display: inline-flex; align-items: center; gap: .5rem; border: 0; background: transparent; font-weight: 700;
+  color: var(--mp-azul-osc); padding: .35rem .2rem; font-size: .95rem;
+}
+.filtros-toggle .bi-funnel { color: var(--mp-azul); }
+.filtros-toggle .bi-chevron-down { font-size: .8rem; transition: transform .2s; }
+.filtros-toggle[aria-expanded="true"] .bi-chevron-down { transform: rotate(180deg); }
+.filtros-cuenta { background: var(--mp-rojo); color: #fff; border-radius: 2rem; font-size: .74rem; padding: .1rem .55rem; }
+.filtros-limpiar { font-size: .85rem; font-weight: 600; color: var(--mp-rojo); }
+.filtros-campos { padding: .6rem .2rem .4rem; }
+.filtro-label { display: block; font-size: .78rem; font-weight: 700; color: var(--tinta-suave); margin-bottom: .25rem; }
+.filtros .form-control, .filtros .form-select { border-color: var(--linea); border-radius: .6rem; font-size: .9rem; }
+.filtro-varios { border: 0; margin: 0; padding: 0; }
+.filtro-varios legend { font-size: .78rem; font-weight: 700; color: var(--tinta-suave); margin-bottom: .4rem; }
+.filtro-varios legend span { font-weight: 400; font-style: italic; }
+.filtro-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+.filtro-chip { position: relative; cursor: pointer; margin: 0; }
+.filtro-chip input { position: absolute; opacity: 0; pointer-events: none; }
+.filtro-chip span {
+  display: inline-block; border: 1px solid var(--linea); border-radius: 2rem; padding: .3rem .8rem;
+  font-size: .84rem; color: var(--tinta); background: #fff; transition: all .15s;
+}
+.filtro-chip:hover span { border-color: var(--mp-azul); }
+.filtro-chip input:checked + span { background: var(--mp-azul); border-color: var(--mp-azul); color: #fff; }
+.filtro-chip input:focus-visible + span { outline: 2px solid var(--mp-azul); outline-offset: 2px; }
+.filtro-vacio { font-size: .85rem; color: var(--tinta-suave); }
+.filtros-acciones { display: flex; justify-content: flex-end; }
+.btn-aplicar {
+  display: inline-flex; align-items: center; gap: .4rem; border: 0; background: var(--mp-azul); color: #fff;
+  font-weight: 700; border-radius: .7rem; padding: .5rem 1.1rem;
+}
+.btn-aplicar:hover { background: var(--mp-azul-osc); }
+.tabla-sgo td.num, .tabla-sgo th.num { text-align: right; }

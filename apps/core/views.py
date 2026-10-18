@@ -1,6 +1,7 @@
 from django.http import Http404, JsonResponse
 from django.shortcuts import render
 
+from .filtros import activos, leer_filtros, para_plantilla
 from .registry import obtener_catalogo, obtener_modulo, obtener_modulos
 from .utils import PERIODO_DEFECTO, PERIODOS
 
@@ -43,7 +44,8 @@ def analisis(request, modulo, analisis):
         raise Http404("Análisis inexistente")
 
     periodos, periodo = _periodo(request, item)
-    datos = item["funcion"](periodo)
+    filtros = leer_filtros(item["filtros"], request.GET)
+    datos = item["funcion"](periodo, filtros) if item["filtros"] else item["funcion"](periodo)
     datos["conclusiones"] = [c for c in datos.get("conclusiones", []) if c]
 
     return render(request, "core/analisis.html", {
@@ -54,10 +56,31 @@ def analisis(request, modulo, analisis):
         "periodos": periodos,
         "datos": datos,
         "graficos": [s["grafico"] for s in datos["secciones"]],
+        "filtros": para_plantilla(item["filtros"], filtros),
+        "filtros_activos": activos(item["filtros"], filtros),
     })
 
 
 MAX_FILAS_DETALLE = 2000
+
+
+def _celda(v):
+    """Texto de una celda del modal: números con formato uruguayo y fechas dd/mm/aaaa."""
+    from datetime import date, datetime
+    from decimal import Decimal
+    if v is None:
+        return ""
+    if isinstance(v, bool):
+        return "Sí" if v else "No"
+    if isinstance(v, (int, float, Decimal)):
+        f = float(v)
+        texto = f"{f:,.0f}" if f.is_integer() else f"{f:,.2f}"
+        return texto.replace(",", "X").replace(".", ",").replace("X", ".")
+    if isinstance(v, datetime):
+        return v.strftime("%d/%m/%Y %H:%M") if (v.hour or v.minute) else v.strftime("%d/%m/%Y")
+    if isinstance(v, date):
+        return v.strftime("%d/%m/%Y")
+    return str(v).strip()
 
 
 def detalle(request, modulo, analisis):
@@ -71,14 +94,14 @@ def detalle(request, modulo, analisis):
     if item is None or funcion is None:
         return JsonResponse({"error": "Este análisis no tiene detalle de registros."}, status=404)
 
-    resultado = funcion(
-        request.GET.get("clave", ""),
-        request.GET.get("valor", ""),
-        request.GET.get("serie", ""),
-        _periodo(request, item)[1],
-    )
+    argumentos = [request.GET.get("clave", ""), request.GET.get("valor", ""),
+                  request.GET.get("serie", ""), _periodo(request, item)[1]]
+    if item["filtros"]:
+        resultado = funcion(*argumentos, filtros=leer_filtros(item["filtros"], request.GET))
+    else:
+        resultado = funcion(*argumentos)
     filas = resultado.get("filas", [])
     resultado["total"] = len(filas)
-    resultado["filas"] = [[str(v) if v is not None else "" for v in f] for f in filas[:MAX_FILAS_DETALLE]]
+    resultado["filas"] = [[_celda(v) for v in f] for f in filas[:MAX_FILAS_DETALLE]]
     resultado["recortado"] = len(filas) > MAX_FILAS_DETALLE
     return JsonResponse(resultado)

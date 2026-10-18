@@ -9,6 +9,9 @@
     "fmt:pct": (v) => (v == null ? "–" : nf.format(v) + "%"),
     "fmt:num": (v) => (v == null ? "–" : nf.format(v)),
     "fmt:abs": (v) => (v == null ? "–" : nf.format(Math.abs(v))),
+    // Etiquetas sobre las barras: ECharts pasa el punto completo, no solo el valor
+    "lbl:num": (p) => (p.value == null ? "" : nf.format(p.value)),
+    "lbl:pct": (p) => (p.value == null ? "" : nf.format(p.value) + "%"),
   };
 
   function aplicarFormatos(obj) {
@@ -18,6 +21,11 @@
       return obj;
     }
     return typeof obj === "string" && formatos[obj] ? formatos[obj] : obj;
+  }
+
+  // Ayudas de los indicadores (cómo se calcula cada uno)
+  if (window.bootstrap) {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((el) => new bootstrap.Tooltip(el));
   }
 
   // ---------- Gráficos ----------
@@ -150,7 +158,9 @@
     document.getElementById("detalle-resumen").innerHTML = "";
     det.texto = ""; det.chip = null;
     modal.show();
-    const params = new URLSearchParams({ clave, valor, serie, periodo: modalEl.dataset.periodo });
+    // Los filtros de la pantalla (divisiones, fechas, ...) viajan con el pedido de detalle
+    const params = new URLSearchParams(window.location.search);
+    Object.entries({ clave, valor, serie, periodo: modalEl.dataset.periodo }).forEach(([k, v]) => params.set(k, v));
     try {
       const r = await fetch(modalEl.dataset.url + "?" + params);
       const datos = await r.json();
@@ -225,6 +235,7 @@
           modulo: form.dataset.modulo,
           analisis: form.dataset.analisis,
           periodo: form.dataset.periodo,
+          filtros: window.location.search,
           pregunta,
         }),
       });

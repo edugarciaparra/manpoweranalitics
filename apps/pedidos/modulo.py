@@ -4,10 +4,10 @@ from . import services
 MODULO = {
     "slug": "pedidos",
     "titulo": "Pedidos",
-    "descripcion": "Pedidos de personal abiertos, vencidos y cerrados, por cliente y puesto.",
+    "descripcion": "Resumen, SLA, demanda, clientes, reclutamiento, embudo, eficiencia y dimensiones de los pedidos.",
     "icono": "bi-clipboard-check",
     "color": "#0B5CAB",
-    "palabras_clave": "vacantes vencidos cierre puesto calificacion",
+    "palabras_clave": "vacantes sla cumplimiento demanda embudo zombie reclutamiento marcas divisiones",
 }
 
 

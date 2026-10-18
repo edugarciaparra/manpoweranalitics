@@ -99,7 +99,15 @@ def preguntar(request):
     if item is None:
         return JsonResponse({"error": "Análisis desconocido."}, status=404)
 
-    datos = item["funcion"](cuerpo.get("periodo", PERIODO_DEFECTO))
+    periodo = cuerpo.get("periodo", PERIODO_DEFECTO)
+    if item["filtros"]:
+        from django.http import QueryDict
+
+        from apps.core.filtros import leer_filtros
+        consulta = QueryDict(str(cuerpo.get("filtros") or "").lstrip("?"))
+        datos = item["funcion"](periodo, leer_filtros(item["filtros"], consulta))
+    else:
+        datos = item["funcion"](periodo)
     sistema = (
         "Sos un asistente de análisis para Manpower Uruguay. Respondé en español "
         "rioplatense, breve y con números concretos. El usuario está viendo el análisis "
