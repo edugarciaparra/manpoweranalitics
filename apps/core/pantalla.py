@@ -86,3 +86,12 @@ def detalle(titulo, columnas, filas_dict, descripcion=""):
         "columnas": columnas,
         "filas": [[f.get(k) for k in claves] for f in filas_dict],
     }
+
+
+def meses_atras(fecha, meses):
+    """La misma fecha `meses` meses antes (si el día no existe, el último día de ese mes)."""
+    import calendar
+    total = fecha.year * 12 + fecha.month - 1 - meses
+    anio, mes = divmod(total, 12)
+    dia = min(fecha.day, calendar.monthrange(anio, mes + 1)[1])
+    return fecha.replace(year=anio, month=mes + 1, day=dia)

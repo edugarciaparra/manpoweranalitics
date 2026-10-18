@@ -9,7 +9,7 @@ conviene filtrar por moneda. Los indicadores muestran la moneda principal.
 from collections import defaultdict
 from datetime import date
 
-from dateutil.relativedelta import relativedelta
+from apps.core.pantalla import meses_atras
 
 from apps.core import graficos as g
 from apps.core import sgo
@@ -60,7 +60,7 @@ def revenue(periodo, filtros):
                ROUND(CAST(ISNULL(SUM(o.OrdenMonto), 0) AS FLOAT)
                      / NULLIF(DATEDIFF(MONTH, MIN(o.OrdenFecha), MAX(o.OrdenFecha)) + 1, 0), 2) AS facturacion_mensual_promedio
         {DESDE} WHERE {w}""", p)
-    desde = date.today() - relativedelta(months=int(filtros.get("meses_tendencia") or 12))
+    desde = meses_atras(date.today(), int(filtros.get("meses_tendencia") or 12))
     # La tendencia mira los últimos N meses aunque el rango de fechas del filtro sea el año en curso
     filtros_tendencia = dict(filtros, fecha_desde=None, fecha_hasta=None)
     wt, pt = where(filtros_tendencia)

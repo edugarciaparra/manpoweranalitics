@@ -5,7 +5,7 @@ mismo SQL, los mismos filtros y los registros de cada gráfico en el modal.
 """
 from datetime import date
 
-from dateutil.relativedelta import relativedelta
+from apps.core.pantalla import meses_atras
 
 from apps.core import graficos as g
 from apps.core import sgo
@@ -26,7 +26,7 @@ MESES_TENDENCIA = Filtro.fijo("meses_tendencia", "Meses de tendencia", {"6": "6"
 
 
 def _desde_meses(filtros):
-    return date.today() - relativedelta(months=int(filtros.get("meses_tendencia") or 12))
+    return meses_atras(date.today(), int(filtros.get("meses_tendencia") or 12))
 
 
 # ==========================================================================
