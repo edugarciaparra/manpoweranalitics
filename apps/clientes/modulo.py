@@ -4,10 +4,10 @@ from . import services
 MODULO = {
     "slug": "clientes",
     "titulo": "Clientes",
-    "descripcion": "Cartera activa, ranking, sectores y clientes que dejaron de pedir.",
+    "descripcion": "Cartera, concentración, penetración, actividad y clientes que pueden dejar de pedir.",
     "icono": "bi-buildings",
     "color": "#6A3FD6",
-    "palabras_clave": "cartera ranking sector actividad tendencia empresas",
+    "palabras_clave": "cartera sector actividad tendencia empresas ejecutivos penetracion",
 }
 
 

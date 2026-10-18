@@ -248,6 +248,7 @@ main { flex: 1; }
 .chip-violeta { --chip: #5B3FD1; --chip-fondo: #EFEBFF; }
 .chip-azul { --chip: #0B5CAB; --chip-fondo: #E6F0FC; }
 .chip-verde { --chip: #0F7A3A; --chip-fondo: #E3F6EA; }
+.chip-naranja { --chip: #B85400; --chip-fondo: #FDEBDC; }
 
 .detalle-barra { display: flex; flex-wrap: wrap; gap: .6rem; margin-bottom: 1rem; }
 .detalle-buscar {
@@ -281,6 +282,7 @@ main { flex: 1; }
 .pildora-violeta { background: #EFEBFF; color: #5B3FD1; }
 .pildora-azul { background: #E6F0FC; color: #0B5CAB; }
 .pildora-verde { background: #E3F6EA; color: #0F7A3A; }
+.pildora-naranja { background: #FDEBDC; color: #B85400; }
 
 .modal-mp .modal-footer { justify-content: space-between; border-top: 1px solid #E6ECF4; background: #FBFCFE; padding: .8rem 1.4rem; }
 .detalle-cuenta { color: var(--tinta-suave); font-size: .85rem; }

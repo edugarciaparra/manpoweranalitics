@@ -15,7 +15,7 @@ from apps.core.estadistica import mediana
 from apps.core.utils import formato_millones, formato_numero, formato_pct
 
 from . import services
-from .services import LINEAS, RANKINGS, ROLES_EJECUTIVO
+from .services import ACTIVIDADES, ESTADO_ACTIVO_ID, LINEAS, ROLES_EJECUTIVO
 
 catalogo = Catalogo()
 FOTO = {"usa_periodo": False}
@@ -65,10 +65,6 @@ def _barras_v(nombre, etiquetas, valores, colores=None, rotar=0):
     )
 
 
-def _ranking_valido(c):
-    return c["ranking"] in RANKINGS
-
-
 # ==========================================================================
 # 1. Composición de la cartera
 # ==========================================================================
@@ -83,10 +79,11 @@ def composicion(periodo):
     activo = services.estado_activo()
 
     # Estados en el orden de la tabla EstadosCliente
-    estados = [d for _, d in sorted(tabla_referencia("EstadosCliente").items())]
+    tabla_estados = sorted(tabla_referencia("EstadosCliente").items())
+    estados = [d for _, d in tabla_estados]
     por_estado = Counter(c["estado"] for c in todos)
     grafico_estado = _barras_v("Clientes", estados, [por_estado[e] for e in estados],
-                               [g.SERIES[0] if e == activo else g.AZUL[1] for e in estados])
+                               [g.SERIES[0] if i == ESTADO_ACTIVO_ID else g.AZUL[1] for i, _ in tabla_estados], rotar=25)
 
     sectores = Counter(c["sector"] for c in act).most_common()
     grafico_sector = _barras_h("Clientes activos", [s for s, _ in sectores], [v for _, v in sectores])
@@ -133,36 +130,31 @@ def composicion(periodo):
 
 
 # ==========================================================================
-# 2. Ranking y concentración
+# 2. Concentración de la facturación
 # ==========================================================================
 @catalogo.registrar(
-    "ranking", "Ranking y concentración",
-    "Cómo se reparten los clientes por ranking y cuánto depende la facturación de pocos clientes.",
+    "concentracion", "Concentración de la facturación",
+    "Qué sectores y qué clientes explican la facturación, y cuánto depende de pocos clientes.",
     icono="bi-trophy", **FOTO,
 )
-def ranking(periodo):
+def concentracion(periodo):
     act = services.activos()
-    por_rank = Counter(c["ranking"] for c in act)
-    fact_rank = defaultdict(float)
+    fact_sector = defaultdict(float)
     for c in act:
-        fact_rank[c["ranking"]] += c["facturado_12m"]
-    grafico_rank_cli = _barras_v("Clientes", RANKINGS, [por_rank[r] for r in RANKINGS],
-                                 [g.AZUL[5], g.AZUL[3], g.AZUL[1]])
-    grafico_rank_fact = g.base(
-        tooltip={"trigger": "axis", "confine": True, "axisPointer": {"type": "shadow"}, "valueFormatter": "fmt:pesos"},
-        xAxis=g.eje_categorias(RANKINGS), yAxis=g.eje_valores("fmt:pesos_k"),
-        series=[g.barras("Facturado 12 meses", [{"value": round(fact_rank[r]), "itemStyle": {"color": c}}
-                                               for r, c in zip(RANKINGS, [g.AZUL[5], g.AZUL[3], g.AZUL[1]])])],
-    )
+        fact_sector[c["sector"]] += c["facturado_12m"]
+    sectores = sorted(((s, v) for s, v in fact_sector.items() if v > 0), key=lambda x: -x[1])
+    grafico_sector = _barras_h("Facturado 12 meses", [s for s, _ in sectores], [round(v) for _, v in sectores],
+                               formato="", fmt_eje="fmt:pesos_k")
+    grafico_sector["series"][0]["label"]["show"] = False
 
     orden = sorted([c for c in act if c["facturado_12m"] > 0], key=lambda c: -c["facturado_12m"])
     total = sum(c["facturado_12m"] for c in orden)
     part = [round(c["facturado_12m"] / total * 100, 2) for c in orden] if total else []
     acum, s = [], 0
-    for p in part:
-        s += p
+    for p_ in part:
+        s += p_
         acum.append(round(s, 1))
-    corte = next((i for i, a in enumerate(acum) if a >= 80), len(acum) - 1) + 1
+    corte = next((i for i, a in enumerate(acum) if a >= 80), len(acum) - 1) + 1 if acum else 0
     ver = orden[:25]
     grafico_pareto = g.base(
         legend=g.leyenda(),
@@ -171,47 +163,42 @@ def ranking(periodo):
         yAxis=g.eje_valores("fmt:pct", max=100),
         grid={"left": 8, "right": 16, "top": 36, "bottom": 8, "containLabel": True},
         series=[
-            g.barras("Participación", [{"value": p, "itemStyle": {"color": g.SERIES[0] if i < corte else g.AZUL[1]}}
-                                       for i, p in enumerate(part[:25])]),
+            g.barras("Participación", [{"value": p_, "itemStyle": {"color": g.SERIES[0] if i < corte else g.AZUL[1]}}
+                                       for i, p_ in enumerate(part[:25])]),
             g.linea("Acumulado", acum[:25], g.SERIES[1],
                     markLine={"silent": True, "symbol": "none", "lineStyle": {"color": g.TINTA_SUAVE, "type": "dashed"},
                               "label": {"formatter": "80%", "color": g.TINTA_SUAVE}, "data": [{"yAxis": 80}]}),
         ],
     )
-    peso_a = _pct(fact_rank.get("A", 0), total)
+    sin_fact = len(act) - len(orden)
     return {
         "kpis": [
             {"label": "Facturado 12 meses", "valor": formato_millones(total), "detalle": f"{len(orden)} clientes con facturación"},
             {"label": "Clientes que hacen el 80%", "valor": corte, "detalle": f"de {len(orden)} que facturan"},
             {"label": "Peso del principal", "valor": formato_pct(part[0]) if part else "—", "alerta": bool(part) and part[0] > 20,
              "detalle": orden[0]["nombre"] if orden else ""},
-            {"label": "Ranking A", "valor": por_rank.get("A", 0), "detalle": f"{peso_a}% de la facturación"},
+            {"label": "Activos sin facturar", "valor": sin_fact, "alerta": sin_fact > 0, "detalle": "en los últimos 12 meses"},
         ],
         "conclusiones": [
             f"{corte} clientes explican el 80% de lo facturado en los últimos 12 meses.",
-            f"Los clientes de ranking A son {por_rank.get('A', 0)} y aportan el {peso_a}% de la facturación.",
+            f"{sectores[0][0]} es el sector que más factura ({_pct(sectores[0][1], total)}% del total)." if sectores else "",
             f"{orden[0]['nombre']} es el cliente que más factura ({formato_pct(part[0])} del total)." if orden else "",
-            f"{sum(1 for c in act if not _ranking_valido(c))} clientes activos no tienen ranking asignado." if any(not _ranking_valido(c) for c in act) else
-            "Todos los clientes activos tienen ranking asignado.",
+            f"{sin_fact} clientes activos no facturaron nada en los últimos 12 meses.",
         ],
         "secciones": [
-            seccion("Clientes por ranking", grafico=grafico_rank_cli, alto=260, detalle="ranking",
-                    ayuda_detalle="Hacé clic en un ranking para ver sus clientes.",
-                    explicacion="Cantidad de clientes activos en cada ranking (campo ClienteRanking).", lectura=[]),
-            seccion("Facturación por ranking", grafico=grafico_rank_fact, alto=260, detalle="ranking",
-                    ayuda_detalle="Hacé clic en un ranking para ver sus clientes.",
-                    explicacion="Lo facturado en los últimos 12 meses (OrdenesFacturacion) por los clientes de cada ranking. "
-                                "Se muestra aparte de la cantidad para no mezclar dos escalas en un mismo gráfico.",
-                    lectura=[f"El ranking A factura {formato_millones(fact_rank.get('A', 0))}."]),
-            seccion("Concentración de la facturación", grafico=grafico_pareto, alto=380, detalle="cliente",
+            seccion("Facturación por sector", grafico=grafico_sector, alto=max(260, 30 * len(sectores)), detalle="sector",
+                    ayuda_detalle="Hacé clic en un sector para ver sus clientes.",
+                    explicacion="Lo facturado en los últimos 12 meses (OrdenesFacturacion) por los clientes activos de cada "
+                                "sector (tabla SectoresActividad).", lectura=[]),
+            seccion("Concentración por cliente", grafico=grafico_pareto, alto=380, detalle="cliente",
                     ayuda_detalle="Hacé clic en un cliente para ver su ficha.",
                     explicacion="Los 25 clientes que más facturaron, de mayor a menor. Las barras son la participación de "
                                 "cada uno y la línea el acumulado; en azul fuerte los que juntos llegan al 80%.",
                     lectura=[f"Los primeros {min(corte, 25)} clientes concentran el {acum[min(corte, 25) - 1]}%." if acum else ""]),
         ],
-        "sugerencias": ["¿Qué clientes B podrían pasar a A?", "¿Cuánto riesgo tenemos con el cliente principal?"],
-        "contexto_ia": {"por_ranking": dict(por_rank), "facturado_por_ranking": dict(fact_rank),
-                        "clientes_80": corte, "top5": {c["nombre"]: c["facturado_12m"] for c in orden[:5]}},
+        "sugerencias": ["¿Cuánto riesgo tenemos con el cliente principal?", "¿Qué sectores conviene desarrollar?"],
+        "contexto_ia": {"facturado_por_sector": dict(sectores), "clientes_80": corte,
+                        "top5": {c["nombre"]: c["facturado_12m"] for c in orden[:5]}},
     }
 
 
@@ -582,16 +569,13 @@ def abandono(periodo):
 # Detalle de clientes (modal)
 # ==========================================================================
 def _filtro(clave, valor, serie):
-    activo = services.estado_activo()
-    es_activo = lambda c: c["estado"] == activo  # noqa: E731
+    es_activo = services.es_activo
     if clave == "estado":
         return f"Clientes en estado «{valor}»", lambda c: c["estado"] == valor
     if clave == "sector":
         return f"Sector: {valor}", lambda c: es_activo(c) and c["sector"] == valor
     if clave == "tipo":
         return f"Tipo: {valor}", lambda c: es_activo(c) and c["tipo"] == valor
-    if clave == "ranking":
-        return f"Ranking {valor}", lambda c: es_activo(c) and c["ranking"] == valor
     if clave == "cliente":
         return valor, lambda c: c["nombre"] == valor
     if clave == "dias":
@@ -625,11 +609,11 @@ def _filtro(clave, valor, serie):
     return "Clientes", lambda c: False
 
 
-PILDORAS_RANKING = {"A": "verde", "B": "azul", "C": "gris"}
+PILDORAS_ACTIVIDAD = dict(zip(ACTIVIDADES, ["verde", "naranja", "gris"]))
 
 
 @catalogo.detalle("composicion")
-@catalogo.detalle("ranking")
+@catalogo.detalle("concentracion")
 @catalogo.detalle("penetracion")
 @catalogo.detalle("actividad")
 @catalogo.detalle("antiguedad")
@@ -639,15 +623,14 @@ PILDORAS_RANKING = {"A": "verde", "B": "azul", "C": "gris"}
 def detalle(clave, valor, serie, periodo):
     titulo, coincide = _filtro(clave, valor, serie)
     elegidos = sorted((c for c in services.clientes() if coincide(c)), key=lambda c: -c["facturado_12m"])
-    por_rank = Counter(c["ranking"] for c in elegidos)
+    por_act = Counter(services.actividad(c) for c in elegidos)
     return {
         "titulo": titulo,
         "descripcion": "ordenados por facturación de los últimos 12 meses",
         "columnas": services.COLUMNAS_DETALLE,
         "filas": [services.fila_detalle(c) for c in elegidos],
-        "pildoras": {"Ranking": PILDORAS_RANKING},
-        "resumen": [{"texto": f"Ranking {r}", "filtro": r, "valor": por_rank.get(r, 0), "color": PILDORAS_RANKING[r]}
-                    for r in RANKINGS],
-        "columna_resumen": "Ranking",
+        "pildoras": {"Actividad": PILDORAS_ACTIVIDAD},
+        "resumen": [{"texto": a, "valor": por_act.get(a, 0), "color": PILDORAS_ACTIVIDAD[a]} for a in ACTIVIDADES],
+        "columna_resumen": "Actividad",
         "columna_avatar": "Cliente",
     }
