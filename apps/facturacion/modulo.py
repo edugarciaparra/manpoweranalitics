@@ -6,7 +6,7 @@ MODULO = {
     "titulo": "Facturación",
     "descripcion": "Órdenes de facturación, montos por mes y clientes que más facturan.",
     "icono": "bi-receipt",
-    "color": "#0F8A6B",
+    "color": "#0E8A5F",
     "palabras_clave": "ordenes montos cobro factura ingresos",
 }
 

@@ -43,15 +43,19 @@
         {% endfor %}
       </section>
 
-      <section class="conclusiones" aria-labelledby="conclusiones-t">
-        <h2 id="conclusiones-t"><i class="bi bi-lightbulb" aria-hidden="true"></i> Conclusiones</h2>
-        <ul>{% for c in datos.conclusiones %}<li>{{ c }}</li>{% endfor %}</ul>
-        {% if datos.secciones|length > 1 %}
-        <nav class="indice" aria-label="Secciones del análisis">
-          {% for s in datos.secciones %}<a href="#seccion-{{ forloop.counter }}">{{ s.titulo }}</a>{% endfor %}
-        </nav>
-        {% endif %}
-      </section>
+      <div class="franja-conclusiones">
+        <span class="franja-icono" aria-hidden="true"><i class="bi bi-lightbulb-fill"></i></span>
+        <p class="franja-texto"><strong>Conclusión principal:</strong> {{ datos.conclusiones.0 }}</p>
+        <button type="button" class="btn-franja" data-bs-toggle="modal" data-bs-target="#modal-conclusiones">
+          Ver las {{ datos.conclusiones|length }} conclusiones <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
+        </button>
+      </div>
+
+      {% if datos.secciones|length > 1 %}
+      <nav class="indice" aria-label="Secciones del análisis">
+        {% for s in datos.secciones %}<a href="#seccion-{{ forloop.counter }}"><span>{{ forloop.counter }}</span>{{ s.titulo }}</a>{% endfor %}
+      </nav>
+      {% endif %}
 
       {% for s in datos.secciones %}
       <section class="seccion" id="seccion-{{ forloop.counter }}" aria-labelledby="seccion-t-{{ forloop.counter }}">
@@ -61,7 +65,7 @@
         </div>
 
         <div class="row g-4">
-          <div class="{% if s.acciones %}col-xl-7{% else %}col-12{% endif %}">
+          <div class="col-12">
             {% if s.grafico %}
             <div class="panel panel-grafico">
               <button type="button" class="btn-icono btn-descargar" data-grafico="grafico-{{ forloop.counter0 }}"
@@ -105,22 +109,6 @@
             {% endif %}
           </div>
 
-          {% if s.acciones %}
-          <div class="col-xl-5">
-            <div class="panel acciones">
-              <h3><i class="bi bi-signpost-split" aria-hidden="true"></i> Acciones recomendadas</h3>
-              <ol>
-                {% for a in s.acciones %}
-                <li class="accion accion-{{ a.prioridad }}">
-                  <span class="accion-prioridad"><i class="bi {{ a.prioridad_info.icono }}" aria-hidden="true"></i>{{ a.prioridad_info.texto }}</span>
-                  <strong>{{ a.titulo }}</strong>
-                  <p>{{ a.detalle }}</p>
-                </li>
-                {% endfor %}
-              </ol>
-            </div>
-          </div>
-          {% endif %}
         </div>
       </section>
       {% endfor %}
@@ -155,8 +143,32 @@
   </div>
 </div>
 
+{# Modal con todas las conclusiones #}
+<div class="modal fade modal-mp" id="modal-conclusiones" tabindex="-1" aria-labelledby="conclusiones-titulo" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <span class="detalle-icono" aria-hidden="true"><i class="bi bi-lightbulb-fill"></i></span>
+        <div class="detalle-cabeza-texto">
+          <span class="detalle-modulo">{{ modulo.titulo }} · {{ item.titulo }}</span>
+          <h2 class="modal-title" id="conclusiones-titulo">Conclusiones</h2>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <ol class="lista-conclusiones">
+          {% for c in datos.conclusiones %}<li><span>{{ forloop.counter }}</span><p>{{ c }}</p></li>{% endfor %}
+        </ol>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-cerrar" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {# Modal con los registros detrás de un elemento del gráfico #}
-<div class="modal fade modal-detalle" id="modal-detalle" tabindex="-1" aria-labelledby="detalle-titulo" aria-hidden="true"
+<div class="modal fade modal-mp modal-detalle" id="modal-detalle" tabindex="-1" aria-labelledby="detalle-titulo" aria-hidden="true"
      data-url="{% url 'core:detalle' modulo.slug item.slug %}" data-periodo="{{ periodo }}" style="--c: {{ modulo.color }}">
   <div class="modal-dialog modal-xl modal-dialog-scrollable modal-fullscreen-md-down">
     <div class="modal-content">
@@ -191,11 +203,14 @@
       </div>
       <div class="modal-footer">
         <span id="detalle-cuenta" class="detalle-cuenta"></span>
+        <div class="detalle-pie-derecha">
         <nav class="paginado" aria-label="Páginas">
           <button type="button" class="btn-icono" id="detalle-anterior" aria-label="Página anterior"><i class="bi bi-chevron-left"></i></button>
           <span id="detalle-pagina"></span>
           <button type="button" class="btn-icono" id="detalle-siguiente" aria-label="Página siguiente"><i class="bi bi-chevron-right"></i></button>
         </nav>
+        <button type="button" class="btn-cerrar" data-bs-dismiss="modal">Cerrar</button>
+        </div>
       </div>
     </div>
   </div>

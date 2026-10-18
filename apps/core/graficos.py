@@ -12,14 +12,14 @@ con textos especiales que static/js/analisis.js reemplaza por funciones:
 """
 
 # Paleta categórica en orden fijo (validada para daltonismo en pares adyacentes)
-SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
+SERIES = ["#0B5CAB", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
 
 # Rampas secuenciales de un solo tono, de claro a oscuro
 AZUL = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"]
 NARANJA = ["#fde3d6", "#f8bfa3", "#f29a72", "#eb6834", "#c9521f", "#a03f17", "#7a2f10"]
 
 # Divergente: positivo / negativo con gris en el medio
-POSITIVO, NEGATIVO, NEUTRO = "#2a78d6", "#e34948", "#c3c2b7"
+POSITIVO, NEGATIVO, NEUTRO = "#0B5CAB", "#E1251B", "#c3c2b7"
 
 # Estados (siempre acompañados de texto o ícono)
 ESTADO = {"bien": "#0ca30c", "atencion": "#fab219", "serio": "#ec835a", "critico": "#d03b3b"}
@@ -124,7 +124,7 @@ def serie_pronostico(historia, prono, etiquetas_hist, etiquetas_futuras, nombre=
              "tooltip": {"show": False}},
             {"name": "Rango probable (80%)", "type": "line", "data": ancho, "stack": "banda",
              "lineStyle": {"opacity": 0}, "symbol": "none",
-             "areaStyle": {"color": "rgba(42,120,214,.14)"}, "itemStyle": {"color": "rgba(42,120,214,.35)"},
+             "areaStyle": {"color": "rgba(11,92,171,.14)"}, "itemStyle": {"color": "rgba(11,92,171,.35)"},
              "tooltip": {"show": False}},
             linea(nombre, historia + [None] * len(prono["valores"]), SERIES[0]),
             linea("Proyección", puente + prono["valores"], SERIES[0],

@@ -6,7 +6,7 @@ MODULO = {
     "titulo": "Pedidos",
     "descripcion": "Pedidos de personal abiertos, vencidos y cerrados, por cliente y puesto.",
     "icono": "bi-clipboard-check",
-    "color": "#2F6FDE",
+    "color": "#0B5CAB",
     "palabras_clave": "vacantes vencidos cierre puesto calificacion",
 }
 

@@ -23,7 +23,6 @@ devuelve un dict con:
                     lectura   frases con lo que muestran los datos
                     detalle   (opcional) clave para ver los registros al hacer clic
                     tabla     (opcional) {titulo, columnas, filas, vacio}
-                    acciones  (opcional) lista de {prioridad, titulo, detalle}
     sugerencias   preguntas sugeridas para el asistente
     contexto_ia   datos resumidos que recibe el asistente
 
@@ -93,9 +92,8 @@ class Catalogo:
 def seccion(titulo, lectura, grafico=None, alto=320, descripcion="", tabla=None, acciones=None,
             explicacion="", detalle=None, ayuda_detalle=""):
     """Arma una sección de un análisis. Las acciones quedan con su prioridad lista para mostrar."""
-    acciones = [a for a in (acciones or []) if a]  # permite acciones condicionales (None se descarta)
-    for a in acciones:
-        a["prioridad_info"] = PRIORIDADES[a["prioridad"]]
+    # Las acciones recomendadas no se muestran: las va a generar el asistente de IA.
+    acciones = []
     return {
         "titulo": titulo,
         "descripcion": descripcion,

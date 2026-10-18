@@ -6,7 +6,7 @@ MODULO = {
     "titulo": "Candidatos",
     "descripcion": "Quiénes se postulan, de qué canales vienen y quiénes tienen más chances de ingresar.",
     "icono": "bi-person-badge",
-    "color": "#C2571A",
+    "color": "#E07A00",
     "palabras_clave": "postulantes perfil canales puntaje probabilidad",
 }
 
