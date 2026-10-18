@@ -74,7 +74,8 @@
   const modalEl = document.getElementById("modal-detalle");
   const modal = modalEl ? new bootstrap.Modal(modalEl) : null;
   const POR_PAGINA = 25;
-  const det = { columnas: [], filas: [], filtradas: [], pagina: 0, titulo: "" };
+  const det = { columnas: [], filas: [], filtradas: [], pagina: 0, titulo: "", pildoras: {}, texto: "", chip: null };
+  const AVATARES = ["#0B5CAB", "#E1251B", "#0E8A5F", "#6A3FD6", "#E07A00", "#0E7C86"];
 
   function escapar(v) {
     return String(v).replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
@@ -87,13 +88,55 @@
     const desde = det.pagina * POR_PAGINA;
     const visibles = det.filtradas.slice(desde, desde + POR_PAGINA);
     document.getElementById("detalle-cuerpo").innerHTML = visibles
-      .map((f) => "<tr>" + f.map((v) => "<td>" + escapar(v) + "</td>").join("") + "</tr>").join("");
+      .map((f) => "<tr>" + f.map((v, i) => "<td>" + celda(det.columnas[i], v) + "</td>").join("") + "</tr>").join("");
     document.getElementById("detalle-vacio").hidden = total > 0;
     document.getElementById("detalle-cuenta").textContent =
       total ? `Mostrando ${desde + 1}–${Math.min(desde + POR_PAGINA, total)} de ${total.toLocaleString("es-UY")} registros` : "";
     document.getElementById("detalle-pagina").textContent = `${det.pagina + 1} / ${paginas}`;
     document.getElementById("detalle-anterior").disabled = det.pagina === 0;
     document.getElementById("detalle-siguiente").disabled = det.pagina >= paginas - 1;
+  }
+
+  // Celdas con formato: nombre con iniciales y columnas con pastillas de color
+  function celda(columna, v) {
+    if (columna === "Nombre" && v) {
+      const partes = String(v).split(" ");
+      const ini = (partes[0][0] || "") + (partes[1] ? partes[1][0] : "");
+      const color = AVATARES[[...String(v)].reduce((a, ch) => a + ch.charCodeAt(0), 0) % AVATARES.length];
+      return `<span class="avatar" style="background:${color}">${escapar(ini)}</span><strong>${escapar(v)}</strong>`;
+    }
+    const mapa = det.pildoras[columna];
+    if (mapa && mapa[v]) return `<span class="pildora pildora-${mapa[v]}">${escapar(v)}</span>`;
+    return escapar(v);
+  }
+
+  function aplicarFiltros() {
+    const q = det.texto;
+    const iEtapa = det.columnas.indexOf("Etapa");
+    det.filtradas = det.filas.filter((f) =>
+      (!det.chip || f[iEtapa] === det.chip) &&
+      (!q || f.join(" ").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(q)));
+    det.pagina = 0;
+    document.querySelectorAll(".chip-resumen").forEach((b) => {
+      const activo = b.dataset.valor === det.chip;
+      b.classList.toggle("activo", activo);
+      b.setAttribute("aria-pressed", activo ? "true" : "false");
+    });
+    pintarDetalle();
+  }
+
+  function pintarResumen(resumen) {
+    const caja = document.getElementById("detalle-resumen");
+    if (!resumen || !resumen.length) { caja.innerHTML = ""; caja.hidden = true; return; }
+    caja.hidden = false;
+    caja.innerHTML = resumen.map((r) =>
+      `<button type="button" class="chip-resumen chip-${r.color}" data-valor="${escapar(r.texto)}" aria-pressed="false">
+         <span class="chip-valor">${r.valor.toLocaleString("es-UY")}</span><span class="chip-texto">${escapar(r.texto)}</span>
+       </button>`).join("");
+    caja.querySelectorAll(".chip-resumen").forEach((b) => b.addEventListener("click", () => {
+      det.chip = det.chip === b.dataset.valor ? null : b.dataset.valor;
+      aplicarFiltros();
+    }));
   }
 
   async function abrirDetalle(clave, valor, serie) {
@@ -103,6 +146,8 @@
     document.getElementById("detalle-cabeza").innerHTML = "";
     document.getElementById("detalle-cuerpo").innerHTML = "";
     document.getElementById("detalle-filtro").value = "";
+    document.getElementById("detalle-resumen").innerHTML = "";
+    det.texto = ""; det.chip = null;
     modal.show();
     const params = new URLSearchParams({ clave, valor, serie, periodo: modalEl.dataset.periodo });
     try {
@@ -114,6 +159,8 @@
       det.filtradas = datos.filas;
       det.pagina = 0;
       det.titulo = datos.titulo;
+      det.pildoras = datos.pildoras || {};
+      pintarResumen(datos.resumen);
       document.getElementById("detalle-titulo").textContent = datos.titulo;
       document.getElementById("detalle-sub").textContent =
         `${datos.total.toLocaleString("es-UY")} registros` + (datos.recortado ? " (se muestran los primeros 2.000)" : "") +
@@ -129,11 +176,8 @@
 
   if (modalEl) {
     document.getElementById("detalle-filtro").addEventListener("input", (e) => {
-      const q = e.target.value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      det.filtradas = !q ? det.filas : det.filas.filter((f) =>
-        f.join(" ").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(q));
-      det.pagina = 0;
-      pintarDetalle();
+      det.texto = e.target.value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      aplicarFiltros();
     });
     document.getElementById("detalle-anterior").addEventListener("click", () => { det.pagina--; pintarDetalle(); });
     document.getElementById("detalle-siguiente").addEventListener("click", () => { det.pagina++; pintarDetalle(); });

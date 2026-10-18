@@ -13,7 +13,7 @@ from apps.core.utils import (
     contar_por_mes, etiqueta_mes, formato_numero, formato_pct, formato_pesos, meses_completos, siguientes_meses,
 )
 
-from . import services
+from . import cv, services
 from .services import ETAPAS, SI
 
 catalogo = Catalogo()
@@ -595,6 +595,401 @@ def sin_gestionar(periodo):
 
 
 # ==========================================================================
+# 9-12. Análisis del CV (experiencia, permanencia, formación, idiomas)
+# ==========================================================================
+BUCKETS_EXP = [("Sin experiencia", 0, 0), ("Menos de 1 año", 0.01, 0.99), ("1 a 3 años", 1, 2.99),
+               ("3 a 5 años", 3, 4.99), ("5 a 10 años", 5, 9.99), ("Más de 10 años", 10, 999)]
+BUCKETS_PERM = [("Menos de 3 meses", 0, 2), ("3 a 6 meses", 3, 5), ("6 a 12 meses", 6, 11),
+                ("1 a 2 años", 12, 23), ("2 a 5 años", 24, 59), ("Más de 5 años", 60, 9999)]
+
+
+def _bucket_exp(anios):
+    for etiq, a, b in BUCKETS_EXP:
+        if a <= anios <= b:
+            return etiq
+    return BUCKETS_EXP[-1][0]
+
+
+def _bucket_perm(meses):
+    for etiq, a, b in BUCKETS_PERM:
+        if a <= meses <= b:
+            return etiq
+    return BUCKETS_PERM[-1][0]
+
+
+def _tasa_ingreso(filas):
+    return _pct(sum(f["etapa"] == 3 for f in filas), len(filas))
+
+
+def _barras_v(nombre, etiquetas, valores, colores=None, formato="{c}", rotar=0):
+    datos = [{"value": v, "itemStyle": {"color": c}} for v, c in zip(valores, colores)] if colores else valores
+    return g.base(
+        tooltip={"trigger": "axis", "confine": True, "axisPointer": {"type": "shadow"}},
+        xAxis=g.eje_categorias(etiquetas, axisLabel={"interval": 0, "rotate": rotar, "color": g.TINTA_SUAVE}),
+        yAxis=g.eje_valores(),
+        series=[g.barras(nombre, datos, g.SERIES[0], label={"show": True, "position": "top",
+                                                             "formatter": formato, "color": g.TINTA_SUAVE})],
+    )
+
+
+@catalogo.registrar(
+    "experiencia", "Experiencia laboral",
+    "Cuántos años de experiencia declaran, en qué cargos trabajaron y cuánto pesa la experiencia para ingresar.",
+    icono="bi-briefcase", **CON_PERIODO,
+)
+def experiencia_laboral(periodo):
+    filas = services.registros(periodo)
+    perfil = cv.perfil_cv()
+    ids = {f["id"] for f in filas}
+    total = len(filas)
+
+    por_bucket = Counter(_bucket_exp(perfil[f["id"]]["anios_exp"]) for f in filas)
+    etiq_b = [e for e, _, _ in BUCKETS_EXP]
+    grafico_anios = _barras_v("Registrados", etiq_b, [por_bucket[e] for e in etiq_b],
+                              [g.NEUTRO] + [g.AZUL[i] for i in (1, 2, 3, 4, 5)], rotar=15)
+
+    cargos = Counter()
+    for e in cv.experiencia():
+        if e["web_user_id"] in ids:
+            cargos[e["cargo"]] += 1
+    top_cargos = cargos.most_common(12)
+    grafico_cargos = _barras_h("Personas", [c for c, _ in top_cargos], [v for _, v in top_cargos], g.SERIES[2])
+
+    tasas = [_tasa_ingreso([f for f in filas if _bucket_exp(perfil[f["id"]]["anios_exp"]) == e]) for e in etiq_b]
+    media = _tasa_ingreso(filas)
+    grafico_tasa = g.base(
+        tooltip={"trigger": "axis", "confine": True, "axisPointer": {"type": "shadow"}, "valueFormatter": "fmt:pct"},
+        xAxis=g.eje_categorias(etiq_b, axisLabel={"interval": 0, "rotate": 15, "color": g.TINTA_SUAVE}),
+        yAxis=g.eje_valores("fmt:pct"),
+        series=[{"name": "Ingresaron", "type": "bar", "barMaxWidth": 36,
+                 "data": [{"value": v, "itemStyle": {"color": g.POSITIVO if v >= media else g.NEGATIVO,
+                                                     "borderRadius": [4, 4, 0, 0]}} for v in tasas],
+                 "label": {"show": True, "position": "top", "formatter": "{c}%", "color": g.TINTA_SUAVE},
+                 "markLine": {"silent": True, "symbol": "none", "lineStyle": {"color": g.TINTA_SUAVE, "type": "dashed"},
+                              "label": {"formatter": f"media {media}%", "color": g.TINTA_SUAVE}, "data": [{"yAxis": media}]}}],
+    )
+    con_exp = [f for f in filas if perfil[f["id"]]["trabajos"] > 0]
+    trabajando = sum(1 for e in cv.experiencia() if e["web_user_id"] in ids and e["actual"] == cv.TRABAJO_ACTUAL_SI)
+    sin_exp = por_bucket["Sin experiencia"]
+    mejor = etiq_b[tasas.index(max(tasas))]
+
+    return {
+        "kpis": [
+            {"label": "Con experiencia", "valor": f"{_pct(len(con_exp), total)}%", "detalle": f"{formato_numero(len(con_exp))} personas"},
+            {"label": "Experiencia mediana",
+             "valor": f"{mediana([perfil[f['id']]['anios_exp'] for f in con_exp]):.1f} años".replace(".", ",") if con_exp else "—",
+             "detalle": "entre quienes declaran trabajos"},
+            {"label": "Trabajando hoy", "valor": f"{_pct(trabajando, total)}%", "detalle": "según su CV"},
+            {"label": "Cargo más declarado", "valor": top_cargos[0][0] if top_cargos else "—",
+             "detalle": f"{top_cargos[0][1]} personas" if top_cargos else ""},
+        ],
+        "conclusiones": [
+            f"{_pct(sin_exp, total)}% no declara experiencia laboral: son perfiles para puestos de entrada.",
+            f"Los cargos más comunes son {', '.join(c.lower() for c, _ in top_cargos[:3])}: coinciden con los puestos más pedidos.",
+            f"Ingresan más los que tienen {mejor.lower()} ({max(tasas)}%) que los que no tienen experiencia ({tasas[0]}%).",
+            "Cruzar el cargo declarado con el puesto del pedido es el filtro más rápido para preseleccionar.",
+        ],
+        "secciones": [
+            seccion("Años de experiencia", grafico=grafico_anios, alto=300, detalle="anios_exp",
+                    ayuda_detalle="Hacé clic en una barra para ver las personas de ese grupo.",
+                    explicacion="Suma la duración de todos los trabajos que cada persona cargó en su CV y los agrupa por "
+                                "años. La barra gris son quienes no cargaron ningún trabajo.",
+                    lectura=[f"{formato_numero(sin_exp)} registrados no tienen experiencia cargada."]),
+            seccion("En qué cargos trabajaron", grafico=grafico_cargos, alto=380, detalle="cargo",
+                    ayuda_detalle="Hacé clic en un cargo para ver quiénes lo tuvieron.",
+                    explicacion="Cantidad de personas que declararon haber trabajado en cada cargo (los 12 más frecuentes). "
+                                "Una persona con varios trabajos puede sumar en más de un cargo.",
+                    lectura=[f"{top_cargos[0][0]} es el cargo con más experiencia declarada." if top_cargos else ""]),
+            seccion("Cuánto pesa la experiencia para ingresar", grafico=grafico_tasa, alto=300, detalle="anios_exp",
+                    ayuda_detalle="Hacé clic en una barra para ver las personas de ese grupo.",
+                    explicacion="Para cada grupo de experiencia, qué porcentaje terminó ingresando a trabajar por Manpower. "
+                                "En azul los grupos por encima de la media y en rojo los que están por debajo.",
+                    lectura=["La experiencia mejora las chances de ingresar, sobre todo a partir del primer año."]),
+        ],
+        "sugerencias": ["¿Cuántos tienen experiencia como cajero?", "¿Conviene presentar candidatos sin experiencia?"],
+        "contexto_ia": {"por_anios": dict(por_bucket), "cargos": dict(top_cargos), "ingreso_por_anios": dict(zip(etiq_b, tasas))},
+    }
+
+
+@catalogo.registrar(
+    "permanencia", "Permanencia y motivos de salida",
+    "Cuánto duran en cada trabajo, por qué se fueron y en qué cargos la rotación es más alta.",
+    icono="bi-hourglass-split", **FOTO,
+)
+def permanencia(periodo):
+    trabajos = [e for e in cv.experiencia() if e["actual"] != cv.TRABAJO_ACTUAL_SI]
+    por_bucket = Counter(_bucket_perm(e["meses"]) for e in trabajos)
+    etiq = [e for e, _, _ in BUCKETS_PERM]
+    grafico_perm = _barras_v("Trabajos", etiq, [por_bucket[e] for e in etiq],
+                             [g.NARANJA[4], g.NARANJA[3], g.NARANJA[2], g.AZUL[2], g.AZUL[4], g.AZUL[6]], rotar=15)
+
+    causales = Counter(e["causal"] for e in trabajos if e["causal"]).most_common()
+    grafico_causas = _barras_h("Salidas", [c for c, _ in causales], [v for _, v in causales], g.SERIES[1])
+
+    por_cargo = {}
+    for e in trabajos:
+        por_cargo.setdefault(e["cargo"], []).append(e["meses"])
+    cargos = sorted(((c, round(mediana(m))) for c, m in por_cargo.items() if len(m) >= 20), key=lambda x: x[1])
+    grafico_cargos = _barras_h("Meses (mediana)", [c for c, _ in cargos], [v for _, v in cargos], g.SERIES[0],
+                               formato="{c} m")
+    cortos = sum(por_bucket[e] for e in etiq[:2])
+    zafra = dict(causales).get("Fin de contrato / zafra", 0)
+    largos_por_persona = Counter(e["web_user_id"] for e in cv.experiencia() if e["meses"] >= 24)
+    estables = len(largos_por_persona)
+
+    return {
+        "kpis": [
+            {"label": "Permanencia mediana", "valor": f"{round(mediana([e['meses'] for e in trabajos]))} meses",
+             "detalle": "por trabajo terminado"},
+            {"label": "Duraron menos de 6 meses", "valor": f"{_pct(cortos, len(trabajos))}%", "alerta": _pct(cortos, len(trabajos)) > 30,
+             "detalle": f"{formato_numero(cortos)} trabajos"},
+            {"label": "Motivo más común", "valor": causales[0][0] if causales else "—",
+             "detalle": f"{_pct(causales[0][1], len(trabajos))}% de las salidas" if causales else ""},
+            {"label": "Perfiles estables", "valor": formato_numero(estables), "detalle": "con algún trabajo de 2 años o más"},
+        ],
+        "conclusiones": [
+            f"La mitad de los trabajos declarados duró menos de {round(mediana([e['meses'] for e in trabajos]))} meses.",
+            f"«{causales[0][0]}» explica el {_pct(causales[0][1], len(trabajos))}% de las salidas." if causales else "",
+            f"{cargos[0][0]} es el cargo con menor permanencia ({cargos[0][1]} meses) y {cargos[-1][0]} el de mayor ({cargos[-1][1]} meses)." if cargos else "",
+            f"Hay {formato_numero(estables)} personas con algún trabajo de 2 años o más: ideales para puestos que buscan estabilidad.",
+        ],
+        "secciones": [
+            seccion("Cuánto duran en cada trabajo", grafico=grafico_perm, alto=300, detalle="permanencia",
+                    ayuda_detalle="Hacé clic en una barra para ver quiénes tuvieron trabajos de esa duración.",
+                    explicacion="Cada trabajo terminado que figura en los CV, agrupado por cuánto duró. En naranja las "
+                                "permanencias cortas (menos de un año) y en azul las largas. El trabajo actual no se cuenta "
+                                "porque todavía no terminó.",
+                    lectura=[f"{formato_numero(cortos)} trabajos duraron menos de 6 meses."]),
+            seccion("Por qué se fueron", grafico=grafico_causas, alto=300, detalle="causal",
+                    ayuda_detalle="Hacé clic en un motivo para ver quiénes salieron por esa razón.",
+                    explicacion="Motivo de salida declarado en cada trabajo terminado (campo causal de baja del CV).",
+                    lectura=[f"{formato_numero(zafra)} salidas fueron por fin de contrato o zafra: personas acostumbradas a trabajos temporales."],
+                    acciones=[
+                        {"prioridad": "media", "titulo": "Usar a los zafrales para pedidos de temporada",
+                         "detalle": f"{formato_numero(zafra)} salidas fueron por fin de zafra o contrato: ya conocen la modalidad "
+                                    "y suelen aceptar trabajos temporales."},
+                        {"prioridad": "baja", "titulo": "Preguntar por la renuncia por mejor oferta",
+                         "detalle": "Es el motivo más común: en la entrevista conviene validar salario y condiciones para "
+                                    "evitar que se vayan rápido de la asignación."},
+                    ]),
+            seccion("Permanencia por cargo", grafico=grafico_cargos, alto=380, detalle="cargo",
+                    ayuda_detalle="Hacé clic en un cargo para ver quiénes lo tuvieron.",
+                    explicacion="Duración típica (mediana, en meses) de los trabajos de cada cargo. Solo se muestran cargos "
+                                "con al menos 20 trabajos declarados. Más corta la barra, más rotación.",
+                    lectura=["Los cargos con baja permanencia necesitan más reposición: conviene tener reserva de candidatos."]),
+        ],
+        "sugerencias": ["¿Qué cargos rotan más?", "¿Cómo reducir las salidas por mejor oferta?"],
+        "contexto_ia": {"por_duracion": dict(por_bucket), "causales": dict(causales), "permanencia_por_cargo": dict(cargos)},
+    }
+
+
+@catalogo.registrar(
+    "formacion", "Formación",
+    "Máximo nivel educativo, si lo terminaron, qué estudiaron y cuánto influye la formación en el ingreso.",
+    icono="bi-mortarboard", **CON_PERIODO,
+)
+def formacion(periodo):
+    filas = services.registros(periodo)
+    perfil = cv.perfil_cv()
+    ids = {f["id"] for f in filas}
+    total = len(filas)
+    niveles = cv.NIVELES_EDUCATIVOS
+
+    completos = [sum(1 for f in filas if perfil[f["id"]]["nivel_max"] == n and perfil[f["id"]]["nivel_completo"]) for n in niveles]
+    incompletos = [sum(1 for f in filas if perfil[f["id"]]["nivel_max"] == n and not perfil[f["id"]]["nivel_completo"]) for n in niveles]
+    grafico_nivel = g.base(
+        legend=g.leyenda(data=["Completo", "Incompleto"]),
+        tooltip={"trigger": "axis", "confine": True, "axisPointer": {"type": "shadow"}},
+        xAxis=g.eje_categorias(niveles, axisLabel={"interval": 0, "rotate": 15, "color": g.TINTA_SUAVE}),
+        yAxis=g.eje_valores(),
+        series=[{"name": "Completo", "type": "bar", "stack": "n", "barMaxWidth": 40, "data": completos,
+                 "itemStyle": {"color": g.SERIES[0]}},
+                {"name": "Incompleto", "type": "bar", "stack": "n", "data": incompletos,
+                 "itemStyle": {"color": g.AZUL[1], "borderRadius": [4, 4, 0, 0]}}],
+    )
+
+    cursos = Counter()
+    for fm in cv.formacion():
+        if fm["web_user_id"] in ids and fm["nivel_orden"] >= 3:
+            cursos[fm["curso"]] += 1
+    top = cursos.most_common(12)
+    grafico_cursos = _barras_h("Personas", [c for c, _ in top], [v for _, v in top], g.SERIES[6])
+
+    tasas = [_tasa_ingreso([f for f in filas if perfil[f["id"]]["nivel_max"] == n]) for n in niveles]
+    media = _tasa_ingreso(filas)
+    grafico_tasa = g.base(
+        tooltip={"trigger": "axis", "confine": True, "axisPointer": {"type": "shadow"}, "valueFormatter": "fmt:pct"},
+        xAxis=g.eje_categorias(niveles, axisLabel={"interval": 0, "rotate": 15, "color": g.TINTA_SUAVE}),
+        yAxis=g.eje_valores("fmt:pct"),
+        series=[{"name": "Ingresaron", "type": "bar", "barMaxWidth": 36,
+                 "data": [{"value": v, "itemStyle": {"color": g.POSITIVO if v >= media else g.NEGATIVO,
+                                                     "borderRadius": [4, 4, 0, 0]}} for v in tasas],
+                 "label": {"show": True, "position": "top", "formatter": "{c}%", "color": g.TINTA_SUAVE},
+                 "markLine": {"silent": True, "symbol": "none", "lineStyle": {"color": g.TINTA_SUAVE, "type": "dashed"},
+                              "label": {"formatter": f"media {media}%", "color": g.TINTA_SUAVE}, "data": [{"yAxis": media}]}}],
+    )
+    con_terciaria = sum(completos[i] + incompletos[i] for i in range(4, len(niveles)))
+    bachiller_completo = sum(completos[i] for i in range(2, len(niveles)))
+    mas_comun = niveles[max(range(len(niveles)), key=lambda i: completos[i] + incompletos[i])]
+    incompletos_tot = sum(incompletos)
+
+    return {
+        "kpis": [
+            {"label": "Nivel más común", "valor": mas_comun, "detalle": "máximo nivel alcanzado"},
+            {"label": "Bachillerato completo o más", "valor": f"{_pct(bachiller_completo, total)}%", "detalle": f"{formato_numero(bachiller_completo)} personas"},
+            {"label": "Formación terciaria", "valor": f"{_pct(con_terciaria, total)}%", "detalle": "terciario, universitario o posgrado"},
+            {"label": "Último nivel sin terminar", "valor": f"{_pct(incompletos_tot, total)}%", "detalle": "lo están cursando o lo dejaron"},
+        ],
+        "conclusiones": [
+            f"El nivel más frecuente es {mas_comun.lower()}; {_pct(con_terciaria, total)}% tiene formación terciaria.",
+            f"{_pct(incompletos_tot, total)}% no terminó su último nivel: muchos estudian y buscan horarios compatibles.",
+            f"Los que más ingresan son los de nivel {niveles[tasas.index(max(tasas))].lower()} ({max(tasas)}%).",
+            f"{top[0][0]} es la formación técnica o terciaria más común." if top else "",
+        ],
+        "secciones": [
+            seccion("Máximo nivel educativo", grafico=grafico_nivel, alto=320, detalle="nivel",
+                    ayuda_detalle="Hacé clic en una barra para ver las personas de ese nivel (completo o incompleto).",
+                    explicacion="Para cada persona se toma el nivel más alto que cargó en el CV. La parte oscura de la barra "
+                                "son quienes lo terminaron y la clara quienes lo dejaron o lo están cursando.",
+                    lectura=[f"{formato_numero(completos[2] + incompletos[2])} personas llegaron hasta bachillerato."]),
+            seccion("Qué estudiaron", grafico=grafico_cursos, alto=380, detalle="curso",
+                    ayuda_detalle="Hacé clic en una formación para ver quiénes la tienen.",
+                    explicacion="Las 12 formaciones técnicas, terciarias o universitarias más frecuentes (de la tabla de "
+                                "cursos y carreras).",
+                    lectura=["Útil para pedidos que piden una formación específica (administración, logística, informática)."]),
+            seccion("Cuánto influye la formación en el ingreso", grafico=grafico_tasa, alto=300, detalle="nivel",
+                    ayuda_detalle="Hacé clic en una barra para ver las personas de ese nivel.",
+                    explicacion="Porcentaje de cada nivel educativo que terminó ingresando. En azul los niveles por encima "
+                                "de la media y en rojo los que están por debajo.",
+                    lectura=["Para muchos puestos operativos un nivel alto no garantiza ingresar: pesan más la experiencia y la disponibilidad."]),
+        ],
+        "sugerencias": ["¿Cuántos tienen formación en logística?", "¿Los estudiantes aceptan horario rotativo?"],
+        "contexto_ia": {"por_nivel": dict(zip(niveles, map(sum, zip(completos, incompletos)))),
+                        "ingreso_por_nivel": dict(zip(niveles, tasas)), "formaciones": dict(top)},
+    }
+
+
+@catalogo.registrar(
+    "idiomas", "Idiomas",
+    "Qué idiomas declaran, con qué nivel y cuántos sirven para puestos bilingües.",
+    icono="bi-translate", **CON_PERIODO,
+)
+def idiomas(periodo):
+    filas = services.registros(periodo)
+    ids = {f["id"] for f in filas}
+    total = len(filas)
+    decl = [i for i in cv.idiomas() if i["web_user_id"] in ids]
+    lista = [k for k, _ in Counter(i["idioma"] for i in decl).most_common()]
+    colores = [g.AZUL[1], g.AZUL[3], g.AZUL[5], g.SERIES[1]]
+    grafico_idiomas = g.base(
+        legend=g.leyenda(data=list(cv.NIVELES_IDIOMA.values())),
+        tooltip={"trigger": "axis", "confine": True, "axisPointer": {"type": "shadow"}},
+        grid={"left": 8, "right": 16, "top": 36, "bottom": 8, "containLabel": True},
+        xAxis=g.eje_valores(),
+        yAxis=g.eje_categorias(lista, inverse=True),
+        series=[{"name": nombre, "type": "bar", "stack": "i", "barMaxWidth": 26,
+                 "data": [sum(1 for i in decl if i["idioma"] == idi and i["nivel"] == nivel) for idi in lista],
+                 "itemStyle": {"color": colores[nivel - 1]}}
+                for nivel, nombre in cv.NIVELES_IDIOMA.items()],
+    )
+    ingles_bueno = {i["web_user_id"] for i in decl if i["idioma"] == "Inglés" and i["nivel"] >= 2}
+    por_tramo = [_pct(sum(1 for f in filas if f["id"] in ingles_bueno and _tramo(f["edad"]) == t),
+                      sum(1 for f in filas if _tramo(f["edad"]) == t)) for t in TRAMOS_ETIQ]
+    grafico_tramo = g.base(
+        tooltip={"trigger": "axis", "confine": True, "axisPointer": {"type": "shadow"}, "valueFormatter": "fmt:pct"},
+        xAxis=g.eje_categorias(TRAMOS_ETIQ, name="Edad", nameLocation="middle", nameGap=28),
+        yAxis=g.eje_valores("fmt:pct"),
+        grid={"left": 8, "right": 16, "top": 24, "bottom": 28, "containLabel": True},
+        series=[g.barras("Inglés intermedio o más", por_tramo, g.SERIES[0],
+                         label={"show": True, "position": "top", "formatter": "{c}%", "color": g.TINTA_SUAVE})],
+    )
+    con_idioma = len({i["web_user_id"] for i in decl})
+    avanzado = len({i["web_user_id"] for i in decl if i["idioma"] == "Inglés" and i["nivel"] >= 3})
+    portugues = len({i["web_user_id"] for i in decl if i["idioma"] == "Portugués"})
+
+    return {
+        "kpis": [
+            {"label": "Declaran algún idioma", "valor": f"{_pct(con_idioma, total)}%", "detalle": f"{formato_numero(con_idioma)} personas"},
+            {"label": "Inglés intermedio o más", "valor": formato_numero(len(ingles_bueno)), "detalle": f"{_pct(len(ingles_bueno), total)}% del total"},
+            {"label": "Inglés avanzado o nativo", "valor": formato_numero(avanzado), "detalle": "aptos para puestos bilingües"},
+            {"label": "Portugués", "valor": formato_numero(portugues), "detalle": "útil en zonas de frontera y turismo"},
+        ],
+        "conclusiones": [
+            f"{_pct(con_idioma, total)}% declara al menos un idioma; inglés es por lejos el más común.",
+            f"Solo {formato_numero(avanzado)} personas tienen inglés avanzado o nativo: la reserva para call center bilingüe es chica.",
+            (f"Los más jóvenes tienen mejor inglés: {por_tramo[0]}% en 18–24 contra {por_tramo[-1]}% en 50+."
+             if por_tramo[0] > por_tramo[-1] + 3 else
+             f"El inglés no cambia mucho con la edad: {por_tramo[0]}% en 18–24 y {por_tramo[-1]}% en 50+."),
+            f"{formato_numero(portugues)} declaran portugués, útil para Rivera, Artigas y la temporada en Maldonado.",
+        ],
+        "secciones": [
+            seccion("Idiomas y nivel", grafico=grafico_idiomas, alto=280, detalle="idioma",
+                    ayuda_detalle="Hacé clic en una barra para ver quiénes tienen ese idioma con ese nivel.",
+                    explicacion="Cantidad de personas que declararon cada idioma, partida por nivel: del celeste (básico) al "
+                                "azul oscuro (avanzado) y naranja (nativo o bilingüe).",
+                    lectura=[f"Inglés: {formato_numero(sum(1 for i in decl if i['idioma'] == 'Inglés'))} personas."]),
+            seccion("Inglés según la edad", grafico=grafico_tramo, alto=280, detalle="ingles_tramo",
+                    ayuda_detalle="Hacé clic en un tramo para ver quiénes tienen inglés intermedio o más.",
+                    explicacion="Porcentaje de cada tramo de edad que declara inglés de nivel intermedio o superior.",
+                    lectura=[f"El tramo con más inglés es {TRAMOS_ETIQ[por_tramo.index(max(por_tramo))]} años ({max(por_tramo)}%)."],
+                    acciones=[{"prioridad": "media", "titulo": "Validar el nivel de inglés en la entrevista",
+                               "detalle": "El nivel es autodeclarado. Para puestos bilingües, una prueba corta evita "
+                                          "presentar candidatos que no cumplen."}]),
+        ],
+        "sugerencias": ["¿Cuántos candidatos bilingües tenemos?", "¿Dónde buscar gente con portugués?"],
+        "contexto_ia": {"con_idioma": con_idioma, "ingles_intermedio_o_mas": len(ingles_bueno),
+                        "ingles_avanzado": avanzado, "portugues": portugues},
+    }
+
+
+def _filtro_cv(clave, valor, serie):
+    """Filtros de los gráficos del CV: (título, función, columna extra con su valor)."""
+    perfil = cv.perfil_cv()
+    if clave == "anios_exp":
+        return (f"Experiencia: {valor.lower()}", lambda f: _bucket_exp(perfil[f["id"]]["anios_exp"]) == valor,
+                ("Años de experiencia", lambda f: str(perfil[f["id"]]["anios_exp"]).replace(".", ",")))
+    if clave == "cargo":
+        ids = {e["web_user_id"] for e in cv.experiencia() if e["cargo"] == valor}
+        meses = {}
+        for e in cv.experiencia():
+            if e["cargo"] == valor:
+                meses[e["web_user_id"]] = max(meses.get(e["web_user_id"], 0), e["meses"])
+        return (f"Trabajaron como {valor.lower()}", lambda f: f["id"] in ids,
+                ("Meses en el cargo", lambda f: meses.get(f["id"], "")))
+    if clave == "permanencia":
+        trab = {}
+        for e in cv.experiencia():
+            if e["actual"] != cv.TRABAJO_ACTUAL_SI and _bucket_perm(e["meses"]) == valor:
+                trab.setdefault(e["web_user_id"], f"{e['cargo']} en {e['empresa']} ({e['meses']} m)")
+        return (f"Trabajos de {valor.lower()}", lambda f: f["id"] in trab, ("Trabajo", lambda f: trab.get(f["id"], "")))
+    if clave == "causal":
+        trab = {}
+        for e in cv.experiencia():
+            if e["causal"] == valor:
+                trab.setdefault(e["web_user_id"], f"{e['cargo']} en {e['empresa']}")
+        return (f"Salieron por: {valor.lower()}", lambda f: f["id"] in trab, ("Trabajo", lambda f: trab.get(f["id"], "")))
+    if clave == "nivel":
+        completo = {"Completo": True, "Incompleto": False}.get(serie)
+        return ((f"{valor} {serie.lower()}" if completo is not None else f"Nivel máximo: {valor}"),
+                lambda f: perfil[f["id"]]["nivel_max"] == valor and (completo is None or perfil[f["id"]]["nivel_completo"] == completo),
+                ("Formación", lambda f: f"{perfil[f['id']]['curso']} ({'completo' if perfil[f['id']]['nivel_completo'] else 'incompleto'})"))
+    if clave == "curso":
+        ids = {fm["web_user_id"] for fm in cv.formacion() if fm["curso"] == valor}
+        return (f"Formación: {valor}", lambda f: f["id"] in ids,
+                ("Nivel máximo", lambda f: perfil[f["id"]]["nivel_max"] or ""))
+    if clave == "idioma":
+        nivel = next((n for n, nombre in cv.NIVELES_IDIOMA.items() if nombre == serie), None)
+        ids = {i["web_user_id"] for i in cv.idiomas() if i["idioma"] == valor and (nivel is None or i["nivel"] == nivel)}
+        return (f"{valor}{' · ' + serie.lower() if nivel else ''}", lambda f: f["id"] in ids,
+                ("Idiomas", lambda f: ", ".join(perfil[f["id"]]["idiomas"])))
+    if clave == "ingles_tramo":
+        ids = {i["web_user_id"] for i in cv.idiomas() if i["idioma"] == "Inglés" and i["nivel"] >= 2}
+        return (f"Inglés intermedio o más, {valor} años", lambda f: f["id"] in ids and _tramo(f["edad"]) == valor,
+                ("Idiomas", lambda f: ", ".join(perfil[f["id"]]["idiomas"])))
+    return None
+
+
+# ==========================================================================
 # Detalle de registros (modal)
 # ==========================================================================
 def _filtro(clave, valor, serie):
@@ -641,16 +1036,39 @@ def _filtro(clave, valor, serie):
     return "Registros", lambda f: False
 
 
+# Colores de la columna Etapa en el modal
+PILDORAS_ETAPA = {"Solo registro web": "gris", "Pasó a candidato": "violeta", "Entrevistado": "azul", "Ingresado": "verde"}
+
+
 def detalle(clave, valor, serie, periodo):
-    titulo, coincide = _filtro(clave, valor, serie)
+    extra = None
+    filtro_cv = _filtro_cv(clave, valor, serie)
+    if filtro_cv:
+        titulo, coincide, extra = filtro_cv
+    else:
+        titulo, coincide = _filtro(clave, valor, serie)
     # Los análisis de foto actual usan toda la base; los demás, el período elegido
     filas = services.registros(periodo)
     elegidas = sorted((f for f in filas if coincide(f)), key=lambda f: f["dias_act"])
+
+    columnas = list(services.COLUMNAS_DETALLE)
+    if extra:
+        columnas.insert(6, extra[0])
+    salida = []
+    for f in elegidas:
+        fila = services.fila_detalle(f)
+        if extra:
+            fila.insert(6, extra[1](f))
+        salida.append(fila)
+
+    por_etapa = Counter(ETAPAS[f["etapa"]] for f in elegidas)
     return {
         "titulo": titulo,
         "descripcion": "ordenados por última actualización",
-        "columnas": services.COLUMNAS_DETALLE,
-        "filas": [services.fila_detalle(f) for f in elegidas],
+        "columnas": columnas,
+        "filas": salida,
+        "pildoras": {"Etapa": PILDORAS_ETAPA},
+        "resumen": [{"texto": e, "valor": por_etapa.get(e, 0), "color": PILDORAS_ETAPA[e]} for e in ETAPAS],
     }
 
 

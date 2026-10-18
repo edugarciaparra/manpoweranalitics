@@ -161,13 +161,16 @@
   <div class="modal-dialog modal-xl modal-dialog-scrollable modal-fullscreen-md-down">
     <div class="modal-content">
       <div class="modal-header">
-        <div>
+        <span class="detalle-icono" aria-hidden="true"><i class="bi bi-people-fill"></i></span>
+        <div class="detalle-cabeza-texto">
+          <span class="detalle-modulo">{{ modulo.titulo }} · {{ item.titulo }}</span>
           <h2 class="modal-title" id="detalle-titulo">Registros</h2>
           <p class="detalle-sub" id="detalle-sub"></p>
         </div>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
       </div>
       <div class="modal-body">
+        <div class="detalle-resumen" id="detalle-resumen" role="group" aria-label="Filtrar por etapa"></div>
         <div class="detalle-barra">
           <div class="detalle-buscar">
             <i class="bi bi-search" aria-hidden="true"></i>
