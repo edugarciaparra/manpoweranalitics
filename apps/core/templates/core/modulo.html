@@ -14,29 +14,18 @@
         <p class="sub">{{ modulo.descripcion }}</p>
       </header>
 
-      <div class="tipos">
-        {% for tipo_slug, tipo, lista in grupos %}
-        <section class="tipo tipo-{{ tipo_slug }}" aria-labelledby="t-{{ tipo_slug }}">
-          <div class="tipo-cabeza">
-            <span class="tipo-icono"><i class="bi {{ tipo.icono }}" aria-hidden="true"></i></span>
-            <div>
-              <h2 id="t-{{ tipo_slug }}">{{ tipo.pregunta }}</h2>
-              <p>{{ tipo.titulo }} · {{ tipo.explicacion }}</p>
-            </div>
-          </div>
-          <ul class="tipo-lista">
-            {% for a in lista %}
-            <li>
-              <a href="{% url 'core:analisis' modulo.slug a.slug %}">
-                <strong>{{ a.titulo }}</strong>
-                <span>{{ a.descripcion }}</span>
-              </a>
-            </li>
-            {% empty %}
-            <li class="menu-vacio">Todavía no hay análisis de este tipo.</li>
-            {% endfor %}
-          </ul>
-        </section>
+      <div class="lista-analisis">
+        {% for a in analisis %}
+        <a class="tarjeta-analisis" href="{% url 'core:analisis' modulo.slug a.slug %}">
+          <span class="modulo-icono"><i class="bi {{ a.icono }}" aria-hidden="true"></i></span>
+          <span class="tarjeta-texto">
+            <strong>{{ a.titulo }}</strong>
+            <span>{{ a.descripcion }}</span>
+          </span>
+          <i class="bi bi-chevron-right tarjeta-flecha" aria-hidden="true"></i>
+        </a>
+        {% empty %}
+        <p class="vacio">Este módulo todavía no tiene análisis.</p>
         {% endfor %}
       </div>
     </div>

@@ -1,7 +1,6 @@
 from django.http import Http404
 from django.shortcuts import render
 
-from .analisis import PRIORIDADES, TIPOS
 from .registry import obtener_catalogo, obtener_modulo, obtener_modulos
 from .utils import PERIODOS, leer_periodo
 
@@ -23,12 +22,9 @@ def _modulo_y_catalogo(slug):
 
 
 def modulo(request, modulo):
-    """Portada del módulo: los análisis disponibles agrupados por tipo."""
+    """Portada del módulo: los análisis disponibles."""
     mod, catalogo = _modulo_y_catalogo(modulo)
-    return render(request, "core/modulo.html", {
-        "modulo": mod,
-        "grupos": catalogo.por_tipo(),
-    })
+    return render(request, "core/modulo.html", {"modulo": mod, "analisis": list(catalogo)})
 
 
 def analisis(request, modulo, analisis):
@@ -39,15 +35,13 @@ def analisis(request, modulo, analisis):
 
     periodo = leer_periodo(request)
     datos = item["funcion"](periodo)
-    for accion in datos.get("acciones", []):
-        accion["prioridad_info"] = PRIORIDADES[accion["prioridad"]]
 
     return render(request, "core/analisis.html", {
         "modulo": mod,
-        "grupos": catalogo.por_tipo(),
+        "analisis": list(catalogo),
         "item": item,
-        "tipo": TIPOS[item["tipo"]],
         "periodo": periodo,
         "periodos": PERIODOS,
         "datos": datos,
+        "graficos": [s["grafico"] for s in datos["secciones"]],
     })

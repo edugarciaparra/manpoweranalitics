@@ -11,9 +11,7 @@
     <div class="col-lg-9">
       <header class="cabecera cabecera-analisis">
         <div>
-          <span class="etiqueta-tipo tipo-{{ item.tipo }}">
-            <i class="bi {{ tipo.icono }}" aria-hidden="true"></i>{{ tipo.titulo }} · {{ tipo.pregunta }}
-          </span>
+          <a class="volver" href="{{ modulo.url }}"><i class="bi bi-arrow-left" aria-hidden="true"></i> {{ modulo.titulo }}</a>
           <h1>{{ item.titulo }}</h1>
           <p class="sub">{{ item.descripcion }}</p>
         </div>
@@ -35,7 +33,7 @@
         </div>
       </header>
 
-      <section class="kpis" aria-label="Indicadores">
+      <section class="kpis" aria-label="Indicadores principales">
         {% for k in datos.kpis %}
         <div class="kpi{% if k.alerta %} kpi-alerta{% endif %}">
           <span class="kpi-label">{{ k.label }}</span>
@@ -45,57 +43,76 @@
         {% endfor %}
       </section>
 
-      <div class="row g-4">
-        <div class="{% if datos.acciones %}col-xl-7{% else %}col-12{% endif %}">
-          <section class="panel panel-grafico">
-            <button type="button" class="btn-icono btn-descargar" id="descargar" title="Descargar imagen del gráfico">
-              <i class="bi bi-download" aria-hidden="true"></i><span class="visually-hidden">Descargar imagen del gráfico</span>
-            </button>
-            <div class="grafico" id="grafico" style="height: {{ datos.grafico_alto|default:340 }}px"
-                 role="img" aria-label="Gráfico: {{ item.titulo }}"></div>
-          </section>
-
-          <section class="panel lectura" aria-labelledby="lectura-t">
-            <h2 id="lectura-t"><i class="bi bi-lightbulb" aria-hidden="true"></i> Qué muestran los datos</h2>
-            <ul>{% for l in datos.lectura %}{% if l %}<li>{{ l }}</li>{% endif %}{% endfor %}</ul>
-          </section>
-        </div>
-
-        {% if datos.acciones %}
-        <div class="col-xl-5">
-          <section class="panel acciones" aria-labelledby="acciones-t">
-            <h2 id="acciones-t"><i class="bi bi-signpost-split" aria-hidden="true"></i> Acciones recomendadas</h2>
-            <ol>
-              {% for a in datos.acciones %}
-              <li class="accion accion-{{ a.prioridad }}">
-                <span class="accion-prioridad"><i class="bi {{ a.prioridad_info.icono }}" aria-hidden="true"></i>{{ a.prioridad_info.texto }}</span>
-                <strong>{{ a.titulo }}</strong>
-                <p>{{ a.detalle }}</p>
-              </li>
-              {% endfor %}
-            </ol>
-          </section>
-        </div>
-        {% endif %}
-      </div>
-
-      {% if datos.tabla %}
-      <section class="panel">
-        <h2>{{ datos.tabla.titulo }}</h2>
-        {% if datos.tabla.filas %}
-        <div class="table-responsive">
-          <table class="table tabla align-middle mb-0">
-            <thead><tr>{% for c in datos.tabla.columnas %}<th scope="col">{{ c }}</th>{% endfor %}</tr></thead>
-            <tbody>
-              {% for fila in datos.tabla.filas %}<tr>{% for v in fila %}<td>{{ v }}</td>{% endfor %}</tr>{% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% else %}
-        <p class="vacio">{{ datos.tabla.vacio }}</p>
+      <section class="conclusiones" aria-labelledby="conclusiones-t">
+        <h2 id="conclusiones-t"><i class="bi bi-lightbulb" aria-hidden="true"></i> Conclusiones</h2>
+        <ul>{% for c in datos.conclusiones %}<li>{{ c }}</li>{% endfor %}</ul>
+        {% if datos.secciones|length > 1 %}
+        <nav class="indice" aria-label="Secciones del análisis">
+          {% for s in datos.secciones %}<a href="#seccion-{{ forloop.counter }}">{{ s.titulo }}</a>{% endfor %}
+        </nav>
         {% endif %}
       </section>
-      {% endif %}
+
+      {% for s in datos.secciones %}
+      <section class="seccion" id="seccion-{{ forloop.counter }}" aria-labelledby="seccion-t-{{ forloop.counter }}">
+        <div class="seccion-cabeza">
+          <h2 id="seccion-t-{{ forloop.counter }}">{{ s.titulo }}</h2>
+          {% if s.descripcion %}<p>{{ s.descripcion }}</p>{% endif %}
+        </div>
+
+        <div class="row g-4">
+          <div class="{% if s.acciones %}col-xl-7{% else %}col-12{% endif %}">
+            {% if s.grafico %}
+            <div class="panel panel-grafico">
+              <button type="button" class="btn-icono btn-descargar" data-grafico="grafico-{{ forloop.counter0 }}"
+                      title="Descargar imagen del gráfico">
+                <i class="bi bi-download" aria-hidden="true"></i><span class="visually-hidden">Descargar imagen del gráfico</span>
+              </button>
+              <div class="grafico" id="grafico-{{ forloop.counter0 }}" data-indice="{{ forloop.counter0 }}"
+                   style="height: {{ s.grafico_alto }}px" role="img" aria-label="Gráfico: {{ s.titulo }}"></div>
+            </div>
+            {% endif %}
+
+            {% if s.lectura %}
+            <ul class="lectura">{% for l in s.lectura %}<li>{{ l }}</li>{% endfor %}</ul>
+            {% endif %}
+
+            {% if s.tabla %}
+            <div class="panel">
+              <h3>{{ s.tabla.titulo }}</h3>
+              {% if s.tabla.filas %}
+              <div class="table-responsive">
+                <table class="table tabla align-middle mb-0">
+                  <thead><tr>{% for c in s.tabla.columnas %}<th scope="col">{{ c }}</th>{% endfor %}</tr></thead>
+                  <tbody>{% for fila in s.tabla.filas %}<tr>{% for v in fila %}<td>{{ v }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+                </table>
+              </div>
+              {% else %}
+              <p class="vacio">{{ s.tabla.vacio }}</p>
+              {% endif %}
+            </div>
+            {% endif %}
+          </div>
+
+          {% if s.acciones %}
+          <div class="col-xl-5">
+            <div class="panel acciones">
+              <h3><i class="bi bi-signpost-split" aria-hidden="true"></i> Acciones recomendadas</h3>
+              <ol>
+                {% for a in s.acciones %}
+                <li class="accion accion-{{ a.prioridad }}">
+                  <span class="accion-prioridad"><i class="bi {{ a.prioridad_info.icono }}" aria-hidden="true"></i>{{ a.prioridad_info.texto }}</span>
+                  <strong>{{ a.titulo }}</strong>
+                  <p>{{ a.detalle }}</p>
+                </li>
+                {% endfor %}
+              </ol>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </section>
+      {% endfor %}
     </div>
   </div>
 </div>
@@ -127,7 +144,7 @@
   </div>
 </div>
 
-{{ datos.grafico|json_script:"opcion-grafico" }}
+{{ graficos|json_script:"opciones-graficos" }}
 {% endblock %}
 
 {% block scripts %}

@@ -20,24 +20,47 @@
     return typeof obj === "string" && formatos[obj] ? formatos[obj] : obj;
   }
 
-  // ---------- Gráfico ----------
-  const contenedor = document.getElementById("grafico");
+  // ---------- Gráficos ----------
+  // Cada sección puede tener su gráfico; las opciones llegan juntas en una lista.
+  const opciones = JSON.parse(document.getElementById("opciones-graficos").textContent);
+  const contenedores = document.querySelectorAll(".grafico[data-indice]");
+  const graficos = {};
+  const sinAnimacion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
   if (typeof echarts === "undefined") {
-    contenedor.innerHTML =
-      '<p class="vacio">No se pudo cargar el gráfico. Revisá la conexión a internet y recargá la página.</p>';
+    contenedores.forEach((c) => {
+      c.innerHTML = '<p class="vacio">No se pudo cargar el gráfico. Revisá la conexión a internet y recargá la página.</p>';
+    });
   } else {
-    const opcion = aplicarFormatos(JSON.parse(document.getElementById("opcion-grafico").textContent));
-    const grafico = echarts.init(contenedor, null, { renderer: "canvas" });
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) opcion.animation = false;
-    grafico.setOption(opcion);
+    // Se dibuja cada gráfico cuando entra en pantalla, así la página carga rápido
+    const dibujar = (c) => {
+      if (graficos[c.id]) return;
+      const opcion = aplicarFormatos(opciones[Number(c.dataset.indice)]);
+      if (sinAnimacion) opcion.animation = false;
+      const g = echarts.init(c, null, { renderer: "canvas" });
+      g.setOption(opcion);
+      graficos[c.id] = g;
+      new ResizeObserver(() => g.resize()).observe(c);
+    };
+    if ("IntersectionObserver" in window) {
+      const io = new IntersectionObserver((entradas) => {
+        entradas.forEach((e) => { if (e.isIntersecting) { dibujar(e.target); io.unobserve(e.target); } });
+      }, { rootMargin: "200px" });
+      contenedores.forEach((c) => io.observe(c));
+    } else {
+      contenedores.forEach(dibujar);
+    }
 
-    new ResizeObserver(() => grafico.resize()).observe(contenedor);
-
-    document.getElementById("descargar").addEventListener("click", () => {
-      const a = document.createElement("a");
-      a.href = grafico.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "#fff" });
-      a.download = (document.title.split("·")[0].trim() || "grafico") + ".png";
-      a.click();
+    document.querySelectorAll(".btn-descargar").forEach((b) => {
+      b.addEventListener("click", () => {
+        const c = document.getElementById(b.dataset.grafico);
+        dibujar(c);
+        const titulo = c.closest(".seccion").querySelector("h2").textContent.trim();
+        const a = document.createElement("a");
+        a.href = graficos[c.id].getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "#fff" });
+        a.download = titulo + ".png";
+        a.click();
+      });
     });
   }
 

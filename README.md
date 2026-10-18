@@ -25,43 +25,53 @@ manpower_analytics/
 ├── config/                 settings, urls raíz
 ├── apps/
 │   ├── core/               landing, portada de cada módulo y pantalla de análisis
-│   │   ├── analisis.py     tipos de análisis (descriptivo, diagnóstico, predictivo, prescriptivo)
+│   │   ├── analisis.py     catálogo de análisis y armado de secciones
 │   │   ├── registry.py     descubre los módulos listados en settings
 │   │   ├── graficos.py     estilo común de los gráficos ECharts
 │   │   ├── estadistica.py  tendencia, estacionalidad y pronóstico
+│   │   ├── datos_ejemplo.py procesos de selección de ejemplo (Candidatos y Entrevistas)
 │   │   ├── db.py           acceso a sgo_new
 │   │   └── utils.py        períodos, fechas, formatos ($, %, números)
 │   ├── ia/                 asistente (proveedor intercambiable)
-│   ├── pedidos/            ┐ un módulo = una app:
-│   ├── facturacion/        │   modulo.py    título, ícono, color, resumen para la landing
-│   ├── clientes/           │   services.py  datos (hoy de ejemplo, después sgo_new)
-│   └── candidatos/         ┘   analisis.py  los análisis del módulo, uno por función
+│   ├── pedidos/            ┐
+│   ├── facturacion/        │ un módulo = una app:
+│   ├── clientes/           │   modulo.py    título, ícono, color, resumen para la landing
+│   ├── candidatos/         │   services.py  datos (hoy de ejemplo, después sgo_new)
+│   └── entrevistas/        ┘   analisis.py  los análisis del módulo, uno por función
 ├── templates/
 │   ├── base.html
-│   └── partials/menu_analisis.html   menú lateral por tipo de análisis
+│   └── partials/menu_analisis.html   menú lateral del módulo
 └── static/css, static/js
 ```
 
-## Cómo se agrega un análisis
+## Cómo es un análisis
 
-En el `analisis.py` del módulo se escribe una función y se registra con su tipo:
+Cada análisis es profundo: en una misma pantalla combina qué pasó, por qué, qué se
+espera y qué conviene hacer. Arriba muestra 4 indicadores y las conclusiones; abajo,
+varias secciones, cada una con su gráfico, su lectura y, si corresponde, tabla y
+acciones recomendadas.
+
+Para agregar uno, en el `analisis.py` del módulo:
 
 ```python
-@catalogo.registrar("diagnostico", "mi-analisis", "Título", "Descripción corta.")
+from apps.core.analisis import Catalogo, seccion
+
+@catalogo.registrar("mi-analisis", "Título", "Descripción corta.", icono="bi-graph-up")
 def mi_analisis(periodo):
     return {
-        "kpis": [...],          # 4 indicadores
-        "grafico": {...},       # opción de ECharts
-        "lectura": [...],       # frases con lo que muestran los datos
-        "acciones": [...],      # opcional, para los prescriptivos
-        "tabla": {...},         # opcional
-        "sugerencias": [...],   # preguntas para el asistente
-        "contexto_ia": {...},   # datos resumidos para el asistente
+        "kpis": [...],           # 4 indicadores
+        "conclusiones": [...],   # lo más importante, en 3 o 4 frases
+        "secciones": [
+            seccion("Cómo evolucionó...", grafico={...}, lectura=[...]),
+            seccion("Qué conviene hacer", acciones=[...], lectura=[...]),
+        ],
+        "sugerencias": [...],    # preguntas para el asistente
+        "contexto_ia": {...},    # datos resumidos para el asistente
     }
 ```
 
 Aparece solo en el menú lateral y en la portada del módulo. Con `usa_periodo=False`
-el análisis muestra la foto de hoy y no tiene selector de período.
+muestra la foto de hoy y no tiene selector de período.
 
 ## Agregar un módulo nuevo
 

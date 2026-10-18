@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     "apps.facturacion",
     "apps.clientes",
     "apps.candidatos",
+    "apps.entrevistas",
 ]
 
 # Módulos de análisis que aparecen en la landing, en este orden.
@@ -72,6 +73,7 @@ MODULOS_ANALISIS = [
     "apps.facturacion",
     "apps.clientes",
     "apps.candidatos",
+    "apps.entrevistas",
 ]
 
 MIDDLEWARE = [

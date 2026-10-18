@@ -1,4 +1,4 @@
-{# Menú lateral del módulo: análisis agrupados por tipo #}
+{# Menú lateral del módulo: lista de análisis #}
 <aside class="menu-lateral" style="--c: {{ modulo.color }}">
   <a class="menu-modulo{% if not item %} activo{% endif %}" href="{{ modulo.url }}">
     <span class="modulo-icono"><i class="bi {{ modulo.icono }}" aria-hidden="true"></i></span>
@@ -13,24 +13,18 @@
   </button>
 
   <nav class="collapse d-lg-block" id="menu-analisis" aria-label="Análisis de {{ modulo.titulo }}">
-    {% for tipo_slug, tipo, lista in grupos %}
-    <div class="menu-grupo menu-{{ tipo_slug }}">
-      <div class="menu-tipo">
-        <i class="bi {{ tipo.icono }}" aria-hidden="true"></i>
-        <span><strong>{{ tipo.titulo }}</strong> {{ tipo.pregunta }}</span>
-      </div>
-      <ul>
-        {% for a in lista %}
-        <li>
-          <a href="{% url 'core:analisis' modulo.slug a.slug %}{% if periodo %}?periodo={{ periodo }}{% endif %}"
-             class="{% if item.slug == a.slug %}activo{% endif %}"
-             {% if item.slug == a.slug %}aria-current="page"{% endif %}>{{ a.titulo }}</a>
-        </li>
-        {% empty %}
-        <li class="menu-vacio">Sin análisis todavía</li>
-        {% endfor %}
-      </ul>
-    </div>
-    {% endfor %}
+    <ul class="menu-lista">
+      {% for a in analisis %}
+      <li>
+        <a href="{% url 'core:analisis' modulo.slug a.slug %}"
+           class="{% if item.slug == a.slug %}activo{% endif %}"
+           {% if item.slug == a.slug %}aria-current="page"{% endif %}>
+          <i class="bi {{ a.icono }}" aria-hidden="true"></i>{{ a.titulo }}
+        </a>
+      </li>
+      {% empty %}
+      <li class="menu-vacio">Sin análisis todavía</li>
+      {% endfor %}
+    </ul>
   </nav>
 </aside>

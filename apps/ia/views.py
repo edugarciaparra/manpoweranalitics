@@ -32,9 +32,9 @@ def preguntar(request):
     sistema = (
         "Sos un asistente de análisis para Manpower Uruguay. Respondé en español "
         "rioplatense, breve y con números concretos. El usuario está viendo el análisis "
-        f"«{item['titulo']}» ({item['tipo']}). Usá solo estos datos:\n"
+        f"«{item['titulo']}». Usá solo estos datos:\n"
         f"{json.dumps(datos.get('contexto_ia', {}), ensure_ascii=False, default=str)}\n"
-        f"Lectura actual: {' '.join(datos.get('lectura', []))}"
+        f"Conclusiones del análisis: {' '.join(datos.get('conclusiones', []))}"
     )
 
     try:

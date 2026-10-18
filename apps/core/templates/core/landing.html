@@ -23,7 +23,7 @@
 <section class="container-xl modulos" aria-label="Módulos de análisis">
   <div class="row g-3 g-lg-4" id="lista-modulos">
     {% for m in modulos %}
-    <div class="col-12 col-md-6 col-xl-3 modulo-col"
+    <div class="col-12 col-md-6 col-xl-4 modulo-col"
          data-buscar="{{ m.titulo|lower }} {{ m.descripcion|lower }} {{ m.palabras_clave }}">
       <a class="modulo" href="{{ m.url }}" style="--c: {{ m.color }}">
         <span class="modulo-icono"><i class="bi {{ m.icono }}" aria-hidden="true"></i></span>
@@ -42,7 +42,7 @@
     {% endfor %}
   </div>
   <p class="sin-resultados" id="sin-resultados" hidden>
-    Ningún módulo coincide con lo que escribiste. Probá con «pedidos», «facturación», «clientes» o «candidatos».
+    Ningún módulo coincide con lo que escribiste. Probá con «pedidos», «facturación», «clientes», «candidatos» o «entrevistas».
   </p>
 </section>
 {% endblock %}

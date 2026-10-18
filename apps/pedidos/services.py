@@ -47,13 +47,13 @@ def vencidos():
 
 
 def serie_mensual():
-    """Altas y cierres por mes, últimos 24 meses (del más viejo al actual)."""
-    altas = [38, 41, 47, 52, 49, 44, 40, 43, 50, 58, 61, 55,
+    """Altas y cierres por mes, últimos 25 meses (del más viejo al actual, que está en curso)."""
+    altas = [36, 38, 41, 47, 52, 49, 44, 40, 43, 50, 58, 61, 55,
              42, 45, 53, 57, 54, 47, 44, 49, 56, 63, 66, 31]
-    cierres = [35, 37, 44, 49, 50, 45, 38, 40, 46, 52, 58, 57,
+    cierres = [34, 35, 37, 44, 49, 50, 45, 38, 40, 46, 52, 58, 57,
                40, 41, 49, 52, 55, 48, 42, 45, 51, 57, 61, 24]
     vacantes = [a * 3 + (i % 5) for i, a in enumerate(altas)]
-    meses = ultimos_meses(24)
+    meses = ultimos_meses(25)
     return meses, altas, cierres, vacantes
 
 

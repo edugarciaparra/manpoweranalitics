@@ -39,6 +39,23 @@ def ultimos_meses(n=6):
     return list(reversed(resultado))
 
 
+def contar_por_mes(filas, meses, campo="fecha", filtro=None):
+    """Cuenta filas por (anio, mes) de su fecha, para los meses pedidos."""
+    conteo = {m: 0 for m in meses}
+    for f in filas:
+        if filtro and not filtro(f):
+            continue
+        clave = (f[campo].year, f[campo].month)
+        if clave in conteo:
+            conteo[clave] += 1
+    return [conteo[m] for m in meses]
+
+
+def meses_completos(n):
+    """Los últimos n meses terminados (sin el mes en curso)."""
+    return ultimos_meses(n + 1)[:-1]
+
+
 def siguientes_meses(desde, n):
     """Los n meses posteriores a (anio, mes)."""
     anio, mes = desde

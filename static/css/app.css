@@ -127,12 +127,6 @@ main { flex: 1; }
   padding: 1.5rem; color: var(--tinta-suave); margin-top: 1rem;
 }
 
-/* ---------- Tipos de análisis: un tono por tipo ---------- */
-.tipo-descriptivo, .menu-descriptivo { --t: #2a78d6; --t-fondo: #e8f1fc; }
-.tipo-diagnostico, .menu-diagnostico { --t: #6250d6; --t-fondo: #efedfb; }
-.tipo-predictivo, .menu-predictivo { --t: #12855c; --t-fondo: #e4f5ee; }
-.tipo-prescriptivo, .menu-prescriptivo { --t: #c4521f; --t-fondo: #fcebe2; }
-
 /* ---------- Página de módulo y análisis ---------- */
 .pagina-modulo { padding-top: 1.75rem; padding-bottom: 5rem; }
 
@@ -148,20 +142,17 @@ main { flex: 1; }
   background: var(--superficie); border: 1px solid var(--linea); border-radius: .75rem;
   padding: .7rem .9rem; font-weight: 600; color: var(--tinta); margin-bottom: .75rem;
 }
-.menu-grupo { margin-bottom: 1.1rem; }
-.menu-tipo {
-  display: flex; gap: .55rem; align-items: baseline; padding: 0 .5rem .35rem;
-  font-size: .82rem; color: var(--tinta-suave);
+.menu-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: .15rem; }
+.menu-lista a {
+  display: flex; align-items: center; gap: .6rem; padding: .55rem .7rem; border-radius: .6rem;
+  text-decoration: none; color: var(--tinta-suave); font-size: .94rem; font-weight: 500;
 }
-.menu-tipo i { color: var(--t); }
-.menu-tipo strong { color: var(--tinta); font-weight: 700; }
-.menu-grupo ul { list-style: none; margin: 0; padding: 0 0 0 .5rem; border-left: 2px solid var(--t-fondo); margin-left: .9rem; }
-.menu-grupo a {
-  display: block; padding: .4rem .7rem; border-radius: .5rem; text-decoration: none;
-  color: var(--tinta-suave); font-size: .92rem; font-weight: 500;
+.menu-lista a .bi { color: var(--c); font-size: 1rem; }
+.menu-lista a:hover { color: var(--tinta); background: var(--superficie); }
+.menu-lista a.activo {
+  color: var(--tinta); font-weight: 700;
+  background: color-mix(in srgb, var(--c) 10%, white);
 }
-.menu-grupo a:hover { color: var(--tinta); background: var(--superficie); }
-.menu-grupo a.activo { color: var(--t); background: var(--t-fondo); font-weight: 700; }
 .menu-vacio { color: var(--tinta-suave); font-size: .85rem; padding: .4rem .7rem; list-style: none; }
 
 .cabecera { margin-bottom: 1.5rem; }
@@ -173,34 +164,46 @@ main { flex: 1; }
 .cabecera h1 {
   font-weight: 800; letter-spacing: -.03em; font-size: clamp(1.7rem, 3.6vw, 2.4rem); margin: .4rem 0 .3rem;
 }
-.sub { color: var(--tinta-suave); margin: 0; max-width: 42rem; }
-.etiqueta-tipo {
-  display: inline-flex; align-items: center; gap: .4rem;
-  background: var(--t-fondo); color: var(--t); font-weight: 600; font-size: .8rem;
-  padding: .3rem .65rem; border-radius: 2rem;
-}
+.sub { color: var(--tinta-suave); margin: 0; max-width: 44rem; }
 
-/* Portada del módulo: los cuatro tipos */
-.tipos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.25rem; }
-.tipo {
-  background: var(--superficie); border: 1px solid var(--linea); border-radius: 1rem;
-  padding: 1.25rem; border-top: 4px solid var(--t);
+/* Portada del módulo */
+.lista-analisis { display: grid; gap: .9rem; }
+.tarjeta-analisis {
+  display: flex; align-items: center; gap: 1rem; text-decoration: none; color: var(--tinta);
+  background: var(--superficie); border: 1px solid var(--linea); border-radius: 1rem; padding: 1.2rem 1.3rem;
 }
-.tipo-cabeza { display: flex; gap: .85rem; margin-bottom: .9rem; }
-.tipo-icono {
-  flex-shrink: 0; display: grid; place-items: center; width: 2.4rem; height: 2.4rem;
-  border-radius: .7rem; background: var(--t-fondo); color: var(--t); font-size: 1.15rem;
+.tarjeta-analisis:hover { border-color: var(--c); }
+.tarjeta-analisis .modulo-icono { margin: 0; flex-shrink: 0; }
+.tarjeta-texto { flex: 1; }
+.tarjeta-texto strong { display: block; font-size: 1.12rem; font-weight: 700; letter-spacing: -.01em; }
+.tarjeta-texto span { display: block; color: var(--tinta-suave); font-size: .92rem; margin-top: .2rem; }
+.tarjeta-flecha { color: var(--tinta-suave); }
+
+/* Conclusiones e índice */
+.conclusiones {
+  background: var(--tinta); color: #fff; border-radius: 1rem; padding: 1.3rem 1.45rem; margin-bottom: 2.25rem;
 }
-.tipo h2 { font-size: 1.2rem; font-weight: 800; letter-spacing: -.02em; margin: 0; }
-.tipo-cabeza p { color: var(--tinta-suave); font-size: .85rem; margin: .15rem 0 0; }
-.tipo-lista { list-style: none; padding: 0; margin: 0; display: grid; gap: .5rem; }
-.tipo-lista a {
-  display: block; text-decoration: none; color: var(--tinta);
-  padding: .75rem .9rem; border-radius: .7rem; background: var(--papel); border: 1px solid transparent;
+.conclusiones h2 { font-size: 1.05rem; font-weight: 700; margin-bottom: .8rem; }
+.conclusiones h2 .bi { color: #ffd166; }
+.conclusiones ul { margin: 0; padding-left: 1.1rem; display: grid; gap: .5rem; }
+.conclusiones li { line-height: 1.5; }
+.indice {
+  display: flex; flex-wrap: wrap; gap: .4rem; margin-top: 1.1rem; padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, .15);
 }
-.tipo-lista a:hover { border-color: var(--t); }
-.tipo-lista strong { display: block; font-weight: 700; }
-.tipo-lista span { display: block; color: var(--tinta-suave); font-size: .86rem; margin-top: .15rem; }
+.indice a {
+  color: #fff; text-decoration: none; font-size: .84rem; font-weight: 500;
+  background: rgba(255, 255, 255, .1); padding: .35rem .7rem; border-radius: 2rem;
+}
+.indice a:hover { background: rgba(255, 255, 255, .2); }
+
+/* Secciones */
+.seccion { margin-bottom: 2.5rem; scroll-margin-top: 1rem; }
+.seccion-cabeza { margin-bottom: 1rem; }
+.seccion-cabeza h2 { font-size: 1.35rem; font-weight: 800; letter-spacing: -.02em; margin: 0; }
+.seccion-cabeza p { color: var(--tinta-suave); margin: .25rem 0 0; }
+.lectura { margin: 0 0 1.5rem; padding-left: 1.1rem; display: grid; gap: .45rem; }
+.lectura li { line-height: 1.5; }
 
 .periodos {
   display: inline-flex; background: var(--superficie);
@@ -232,7 +235,8 @@ main { flex: 1; }
   background: var(--superficie); border: 1px solid var(--linea); border-radius: 1rem;
   padding: 1.25rem 1.35rem; margin-bottom: 1.5rem;
 }
-.panel h2 { font-size: 1.05rem; font-weight: 700; margin-bottom: 1rem; letter-spacing: -.01em; }
+.panel h2, .panel h3 { font-size: 1.02rem; font-weight: 700; margin-bottom: 1rem; letter-spacing: -.01em; }
+.acciones h3 .bi { color: var(--c); }
 .panel-cabeza { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
 .btn-icono {
   border: 1px solid var(--linea); background: var(--superficie); color: var(--tinta-suave);
@@ -244,9 +248,6 @@ main { flex: 1; }
 .btn-descargar { position: absolute; top: .75rem; right: .75rem; z-index: 2; }
 .panel-grafico .grafico { margin-top: 1.9rem; }
 
-.lectura ul { margin: 0; padding-left: 1.1rem; display: grid; gap: .5rem; }
-.lectura li { line-height: 1.5; }
-.lectura h2 .bi, .acciones h2 .bi { color: var(--c); }
 
 .acciones ol { list-style: none; margin: 0; padding: 0; display: grid; gap: .7rem; }
 .accion {
@@ -321,7 +322,6 @@ main { flex: 1; }
 }
 @media (max-width: 991.98px) {
   .menu-lateral { position: static; }
-  .tipos { grid-template-columns: 1fr; }
 }
 @media (max-width: 575.98px) {
   .kpi { padding: .9rem 1rem; }
