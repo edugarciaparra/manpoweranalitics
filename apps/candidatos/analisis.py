@@ -652,3 +652,271 @@ def detalle_experiencia(clave, valor, serie, periodo, filtros):
             GROUP BY c.CandidatoId, c.CandidatoNombre, c.CandidatoApellido, pc.PerfilCandidatoDescripcion
             {having} ORDER BY calificacion DESC""", params + ([mn, mx] if clave == "calificacion" else []))
     return respuesta_detalle(f"Candidatos · {valor}", COLUMNAS_EXP, filas)
+
+
+# ==========================================================================
+# 6. Calidad y completitud de datos (can_dat)
+# ==========================================================================
+_TIENE_EMAIL = "c.CandidatoEmail IS NOT NULL AND RTRIM(c.CandidatoEmail) != ''"
+_TIENE_CEL = "c.CandidatoCelular IS NOT NULL AND RTRIM(c.CandidatoCelular) != ''"
+_SIN_EMAIL = "(c.CandidatoEmail IS NULL OR RTRIM(c.CandidatoEmail) = '')"
+_SIN_CEL = "(c.CandidatoCelular IS NULL OR RTRIM(c.CandidatoCelular) = '')"
+CAMPOS_COMPLETITUD = [
+    ("Email", _TIENE_EMAIL, _SIN_EMAIL),
+    ("Celular", _TIENE_CEL, _SIN_CEL),
+    ("Teléfono", "c.CandidatoTelefono IS NOT NULL AND RTRIM(c.CandidatoTelefono) != ''",
+     "(c.CandidatoTelefono IS NULL OR RTRIM(c.CandidatoTelefono) = '')"),
+    ("Salario pretendido", "c.CandidatoSalarioPretendido > 0", "(c.CandidatoSalarioPretendido = 0 OR c.CandidatoSalarioPretendido IS NULL)"),
+    ("Salario actual", "c.CandidatoSalarioActual > 0", "(c.CandidatoSalarioActual = 0 OR c.CandidatoSalarioActual IS NULL)"),
+    ("Dirección", "c.CandidatoDireccion IS NOT NULL AND RTRIM(c.CandidatoDireccion) != ''",
+     "(c.CandidatoDireccion IS NULL OR RTRIM(c.CandidatoDireccion) = '')"),
+    ("Localidad", "c.CandidatoLocalidadId IS NOT NULL", "c.CandidatoLocalidadId IS NULL"),
+    ("Departamento", "c.CandidatoDepartamentoId IS NOT NULL", "c.CandidatoDepartamentoId IS NULL"),
+    ("Nacionalidad", "c.CandidatoNacionalidadId IS NOT NULL", "c.CandidatoNacionalidadId IS NULL"),
+    ("Nivel educativo", "c.NivelEducativoId IS NOT NULL", "c.NivelEducativoId IS NULL"),
+]
+_RANGOS_SALARIO = [("No especificado", "c.CandidatoSalarioPretendido = 0 OR c.CandidatoSalarioPretendido IS NULL"),
+                   ("Menos de $20 mil", "c.CandidatoSalarioPretendido < 20000"), ("$20 a $40 mil", "c.CandidatoSalarioPretendido < 40000"),
+                   ("$40 a $60 mil", "c.CandidatoSalarioPretendido < 60000"), ("$60 a $80 mil", "c.CandidatoSalarioPretendido < 80000"),
+                   ("Más de $80 mil", "1=1")]
+COLUMNAS_CONTACTO = ["Candidato Id", "Candidato", "Perfil", "Email", "Celular", "Teléfono", "Salario pretendido"]
+
+
+def _candidatos_contacto(filtros, condicion, params=None, joins="", extra="", columnas=None):
+    w, p = where(filtros)
+    return sgo.filas(f"""
+        SELECT TOP 500 c.CandidatoId, {NOMBRE} AS candidato, RTRIM(pc.PerfilCandidatoDescripcion) AS perfil,
+               RTRIM(c.CandidatoEmail) AS email, RTRIM(c.CandidatoCelular) AS celular, RTRIM(c.CandidatoTelefono) AS telefono,
+               c.CandidatoSalarioPretendido AS salario{extra}
+        FROM dbo.Candidatos c LEFT JOIN dbo.PerfilesCandidatos pc ON c.PerfilCandidatoId = pc.PerfilCandidatoId {joins}
+        WHERE {w} AND ({condicion}) ORDER BY c.CandidatoApellido, c.CandidatoNombre""", p + list(params or []))
+
+
+@catalogo.registrar(
+    "calidad-datos", "Calidad y completitud de datos",
+    "Qué datos faltan en las fichas de los candidatos (contacto, salario, ubicación) y en qué perfiles y departamentos.",
+    usa_periodo=False, icono="bi-clipboard-data", filtros=[s.F_PERFIL, s.F_PAIS, s.F_DEPTO],
+)
+def calidad_datos(periodo, filtros):
+    w, p = where(filtros)
+    k = sgo.fila(f"""
+        SELECT COUNT(*) AS total_candidatos, COUNT(CASE WHEN {_TIENE_EMAIL} THEN 1 END) AS con_email,
+               COUNT(CASE WHEN {_TIENE_CEL} THEN 1 END) AS con_celular, COUNT(CASE WHEN c.CandidatoSalarioPretendido > 0 THEN 1 END) AS con_salario,
+               COUNT(CASE WHEN {_SIN_EMAIL} AND {_SIN_CEL} THEN 1 END) AS sin_contacto,
+               COUNT(CASE WHEN {_TIENE_EMAIL} AND {_TIENE_CEL} AND c.CandidatoSalarioPretendido > 0 AND c.CandidatoLocalidadId IS NOT NULL
+                          THEN 1 END) AS datos_completos
+        FROM dbo.Candidatos c WHERE {w}""", p)
+    campos_sql = ", ".join(f"COUNT(CASE WHEN {tiene} THEN 1 END) AS [{nombre}]" for nombre, tiene, _ in CAMPOS_COMPLETITUD)
+    fila_campos = sgo.fila(f"SELECT {campos_sql} FROM dbo.Candidatos c WHERE {w}", p)
+    total_c = num(k.get("total_candidatos"))
+    campos = sorted(({"label": n, "value": round(proporcion(fila_campos.get(n), total_c), 1)} for n, _, _ in CAMPOS_COMPLETITUD),
+                    key=lambda r: r["value"])
+    matriz = sgo.filas(f"""
+        SELECT CASE WHEN {_TIENE_EMAIL} THEN 'Con email' ELSE 'Sin email' END AS email,
+               CASE WHEN {_TIENE_CEL} THEN 'Con celular' ELSE 'Sin celular' END AS celular, COUNT(*) AS cantidad
+        FROM dbo.Candidatos c WHERE {w}
+        GROUP BY CASE WHEN {_TIENE_EMAIL} THEN 'Con email' ELSE 'Sin email' END, CASE WHEN {_TIENE_CEL} THEN 'Con celular' ELSE 'Sin celular' END""", p)
+
+    def completitud_por(join, desc, id_col, id_c):
+        return sgo.filas(f"""
+            SELECT TOP 15 RTRIM(x.{desc}) AS label, COUNT(*) AS total,
+                   ROUND(AVG(CASE WHEN {_TIENE_EMAIL} THEN 1.0 ELSE 0 END) * 100, 1) AS pct_email,
+                   ROUND(AVG(CASE WHEN {_TIENE_CEL} THEN 1.0 ELSE 0 END) * 100, 1) AS pct_celular,
+                   ROUND(AVG(CASE WHEN c.CandidatoSalarioPretendido > 0 THEN 1.0 ELSE 0 END) * 100, 1) AS pct_salario,
+                   ROUND(AVG(CASE WHEN {_TIENE_EMAIL} AND {_TIENE_CEL} AND c.CandidatoSalarioPretendido > 0 THEN 1.0 ELSE 0 END) * 100, 1) AS pct_completo
+            FROM dbo.Candidatos c INNER JOIN dbo.{join} x ON c.{id_c} = x.{id_col}
+            WHERE {w} GROUP BY x.{id_col}, x.{desc} ORDER BY total DESC""", p)
+
+    por_perfil = completitud_por("PerfilesCandidatos", "PerfilCandidatoDescripcion", "PerfilCandidatoId", "PerfilCandidatoId")
+    por_depto = completitud_por("Departamentos", "DepartamentoNombre", "DepartamentoId", "CandidatoDepartamentoId")
+    case_s = "CASE " + " ".join(f"WHEN {c} THEN '{e}'" for e, c in _RANGOS_SALARIO[:-1]) + f" ELSE '{_RANGOS_SALARIO[-1][0]}' END"
+    salarios = _orden(sgo.filas(f"SELECT {case_s} AS label, COUNT(*) AS value FROM dbo.Candidatos c WHERE {w} GROUP BY {case_s}", p),
+                      [e for e, _ in _RANGOS_SALARIO])
+
+    def celda(e, cel):
+        return next((num(r["cantidad"]) for r in matriz if r["email"] == e and r["celular"] == cel), 0)
+
+    secciones = [
+        seccion("Completitud por campo", [f"El campo más incompleto es {campos[0]['label']} ({pct(campos[0]['value'])} completo)." if campos else ""],
+                g.ranking(etiquetas(campos), valores(campos, "value"), "% completo", formato="fmt:pct"), alto=g.alto_ranking(len(campos)),
+                explicacion="Parte de los candidatos que tiene cargado cada dato, del menos al más completo.", detalle="campo",
+                ayuda_detalle="Hacé clic en un campo para ver los candidatos que no lo tienen."),
+        seccion("Matriz email / celular", [f"{entero(celda('Sin email', 'Sin celular'))} candidatos no tienen ni email ni celular."],
+                g.columnas(["Con celular", "Sin celular"], {"Con email": [celda("Con email", "Con celular"), celda("Con email", "Sin celular")],
+                                                            "Sin email": [celda("Sin email", "Con celular"), celda("Sin email", "Sin celular")]},
+                           rotar=0, colores=[g.SERIES[0], g.NEGATIVO]),
+                explicacion="Combinaciones de email y celular: lo ideal es tener los dos.", detalle="matriz",
+                ayuda_detalle="Hacé clic en una barra para ver esos candidatos."),
+        seccion("Completitud por perfil (top 15 por cantidad)", [extremos(por_perfil, "label", "pct_completo", pct, "más completo", "menos")],
+                g.ranking(etiquetas(por_perfil), valores(por_perfil, "pct_completo"), "% con datos completos", g.SERIES[2], formato="fmt:pct"),
+                alto=g.alto_ranking(len(por_perfil)),
+                explicacion="Parte de los candidatos de cada perfil con email, celular y salario pretendido.", detalle="perfil",
+                ayuda_detalle="Hacé clic en un perfil para ver sus candidatos incompletos.",
+                tabla=tabla("Por perfil", ["Perfil", "Candidatos", "% email", "% celular", "% salario", "% completo"],
+                            [[r["label"], entero(r["total"]), pct(r["pct_email"]), pct(r["pct_celular"]), pct(r["pct_salario"]),
+                              pct(r["pct_completo"])] for r in por_perfil])),
+        seccion("Rangos salariales pretendidos", [lider(salarios, "label", "value", "candidatos")],
+                g.columnas(etiquetas(salarios), {"Candidatos": valores(salarios, "value")}, rotar=0, colores=[g.SERIES[1]]),
+                explicacion="Salario que pretende el candidato, en rangos.", detalle="salario",
+                ayuda_detalle="Hacé clic en un rango para ver esos candidatos."),
+        seccion("Completitud por departamento (top 15)", [extremos(por_depto, "label", "pct_completo", pct, "más completo", "menos")],
+                g.ranking(etiquetas(por_depto), valores(por_depto, "pct_completo"), "% con datos completos", g.SERIES[3], formato="fmt:pct"),
+                alto=g.alto_ranking(len(por_depto)),
+                explicacion="Parte de los candidatos de cada departamento con email, celular y salario pretendido.", detalle="departamento",
+                ayuda_detalle="Hacé clic en un departamento para ver sus candidatos incompletos."),
+    ]
+    return {
+        "kpis": [
+            kpi("Total candidatos", entero(total_c)),
+            kpi("Con email", entero(k.get("con_email")), pct(proporcion(k.get("con_email"), total_c))),
+            kpi("Con celular", entero(k.get("con_celular")), pct(proporcion(k.get("con_celular"), total_c))),
+            kpi("Con salario pretendido", entero(k.get("con_salario")), pct(proporcion(k.get("con_salario"), total_c))),
+            kpi("Datos completos", entero(k.get("datos_completos")), pct(proporcion(k.get("datos_completos"), total_c)),
+                "Email, celular, salario pretendido y localidad."),
+            kpi("Sin contacto", entero(k.get("sin_contacto")), "ni email ni celular", alerta=num(k.get("sin_contacto")) > 0),
+        ],
+        "conclusiones": [
+            f"{pct(proporcion(k.get('datos_completos'), total_c))} de las fichas está completa.",
+            f"{entero(k.get('sin_contacto'))} candidatos no tienen forma de contacto.",
+            f"El dato que más falta es {campos[0]['label']}." if campos else "",
+        ],
+        "secciones": secciones,
+        "sugerencias": ["¿Qué datos faltan más?", "¿Cuántos candidatos no tienen contacto?"],
+        "contexto_ia": {"kpis": k, "campos": campos, "por_perfil": por_perfil},
+    }
+
+
+@catalogo.detalle("calidad-datos")
+def detalle_calidad_datos(clave, valor, serie, periodo, filtros):
+    incompleto = f"NOT ({_TIENE_EMAIL} AND {_TIENE_CEL} AND c.CandidatoSalarioPretendido > 0)"
+    params, joins = [], ""
+    if clave == "campo":
+        condicion = next((sin for n, _, sin in CAMPOS_COMPLETITUD if n == valor), "1=0")
+    elif clave == "matriz":
+        condicion = f"{_TIENE_EMAIL if serie == 'Con email' else _SIN_EMAIL} AND {_TIENE_CEL if valor == 'Con celular' else _SIN_CEL}"
+    elif clave == "salario":
+        partes, previas = [], []
+        for e, c in _RANGOS_SALARIO:
+            if e == valor:
+                partes = [f"({c})"] + [f"NOT ({x})" for x in previas]
+                break
+            previas.append(c)
+        condicion = " AND ".join(partes) or "1=0"
+    elif clave == "perfil":
+        condicion, params = f"RTRIM(pc.PerfilCandidatoDescripcion) = %s AND {incompleto}", [valor]
+    else:
+        condicion, params = f"RTRIM(d.DepartamentoNombre) = %s AND {incompleto}", [valor]
+        joins = "LEFT JOIN dbo.Departamentos d ON c.CandidatoDepartamentoId = d.DepartamentoId"
+    titulo = f"Candidatos · {valor}" + (f" · {serie}" if clave == "matriz" else "") + (" · sin el dato" if clave == "campo" else "")
+    return respuesta_detalle(titulo, COLUMNAS_CONTACTO, _candidatos_contacto(filtros, condicion, params, joins))
+
+
+# ==========================================================================
+# 7. Problemas y errores de datos (can_err)
+# ==========================================================================
+PROBLEMAS = [
+    ("Sin contacto", f"{_SIN_EMAIL} AND {_SIN_CEL}", "crítico"),
+    ("Email inválido", f"{_TIENE_EMAIL} AND CHARINDEX('@', RTRIM(c.CandidatoEmail)) = 0", "inválido"),
+    ("Celular inválido", f"{_TIENE_CEL} AND LEN(RTRIM(c.CandidatoCelular)) < 8", "inválido"),
+    ("Libreta sin categoría", "c.CandidatoLibretaConducir = 'S' AND c.CategoriaLibretaConducirId IS NULL", "inconsistencia"),
+    ("Categoría sin libreta", "(c.CandidatoLibretaConducir = 'N' OR c.CandidatoLibretaConducir IS NULL) AND c.CategoriaLibretaConducirId IS NOT NULL",
+     "inconsistencia"),
+    ("Carné de salud vencido", "c.CandidatoCarneSalud = 'S' AND c.CandidatoVencimientoCarneSalud < GETDATE() "
+                               "AND c.CandidatoVencimientoCarneSalud > '1900-01-01'", "inconsistencia"),
+    ("Edad inválida", f"c.CandidatoFechaNacimiento > '1900-01-01' AND ({EDAD} < 16 OR {EDAD} > 80)", "inválido"),
+    ("Fecha de nacimiento futura", "c.CandidatoFechaNacimiento > GETDATE()", "inválido"),
+]
+_DUP_DOC = "c.CandidatoNroDocumento IN (SELECT c2.CandidatoNroDocumento FROM dbo.Candidatos c2 WHERE {w2} GROUP BY c2.CandidatoNroDocumento HAVING COUNT(*) > 1)"
+_DUP_EMAIL = (f"{_TIENE_EMAIL} AND RTRIM(c.CandidatoEmail) IN (SELECT RTRIM(c2.CandidatoEmail) FROM dbo.Candidatos c2 WHERE {{w2}} "
+              "AND c2.CandidatoEmail IS NOT NULL AND RTRIM(c2.CandidatoEmail) != '' GROUP BY RTRIM(c2.CandidatoEmail) HAVING COUNT(*) > 1)")
+
+
+@catalogo.registrar(
+    "problemas-datos", "Problemas y errores de datos",
+    "Fichas con errores: sin contacto, emails o celulares inválidos, inconsistencias de libreta y carné, edades imposibles y duplicados.",
+    usa_periodo=False, icono="bi-bug", filtros=[s.F_PERFIL, s.F_PAIS],
+)
+def problemas_datos(periodo, filtros):
+    w, p = where(filtros)
+    w2, p2 = where(filtros, "c2")
+    sumas = ", ".join(f"SUM(CASE WHEN {cond} THEN 1 ELSE 0 END) AS [{nombre}]" for nombre, cond, _ in PROBLEMAS)
+    k = sgo.fila(f"SELECT COUNT(*) AS total_candidatos, {sumas} FROM dbo.Candidatos c WHERE {w}", p)
+    dup_doc = num(sgo.valor(f"""SELECT COUNT(*) AS duplicados FROM (SELECT c.CandidatoNroDocumento FROM dbo.Candidatos c WHERE {w}
+                                 GROUP BY c.CandidatoNroDocumento HAVING COUNT(*) > 1) x""", p))
+    dup_email = num(sgo.valor(f"""SELECT COUNT(*) AS duplicados FROM (SELECT RTRIM(c.CandidatoEmail) AS email FROM dbo.Candidatos c
+                                   WHERE {w} AND {_TIENE_EMAIL} GROUP BY RTRIM(c.CandidatoEmail) HAVING COUNT(*) > 1) x""", p))
+    por_perfil = sgo.filas(f"""
+        SELECT TOP 15 RTRIM(pc.PerfilCandidatoDescripcion) AS label, COUNT(*) AS total_candidatos,
+               SUM(CASE WHEN {PROBLEMAS[0][1]} THEN 1 ELSE 0 END) AS sin_contacto,
+               SUM(CASE WHEN {PROBLEMAS[1][1]} THEN 1 ELSE 0 END) AS email_invalido,
+               SUM(CASE WHEN {PROBLEMAS[3][1]} THEN 1 ELSE 0 END) AS libreta_sin_categoria
+        FROM dbo.Candidatos c {JOIN_PERFIL} WHERE {w}
+        GROUP BY pc.PerfilCandidatoId, pc.PerfilCandidatoDescripcion ORDER BY total_candidatos DESC""", p)
+    faltantes_sql = ", ".join(f"SUM(CASE WHEN {sin} THEN 1 ELSE 0 END) AS [{n}]" for n, _, sin in CAMPOS_COMPLETITUD
+                              if n in ("Email", "Celular", "Dirección", "Departamento", "Localidad"))
+    falt = sgo.fila(f"SELECT {faltantes_sql} FROM dbo.Candidatos c WHERE {w}", p)
+
+    total_c = num(k.get("total_candidatos"))
+    dist = [{"label": n, "value": num(k.get(n)), "tipo": t} for n, _, t in PROBLEMAS]
+    dist += [{"label": "Documento duplicado", "value": dup_doc, "tipo": "crítico"},
+             {"label": "Email duplicado", "value": dup_email, "tipo": "crítico"}]
+    criticos = sum(r["value"] for r in dist if r["tipo"] == "crítico")
+    inconsist = sum(r["value"] for r in dist if r["tipo"] == "inconsistencia")
+    invalidos = sum(r["value"] for r in dist if r["tipo"] == "inválido")
+    colores_tipo = {"crítico": g.NEGATIVO, "inconsistencia": g.ESTADO["serio"], "inválido": g.ESTADO["atencion"]}
+    dist_orden = sorted(dist, key=lambda r: -r["value"])
+    grafico = g.ranking(etiquetas(dist_orden), valores(dist_orden, "value"), "Candidatos")
+    grafico["series"][0]["data"] = [{"value": r["value"], "itemStyle": {"color": colores_tipo[r["tipo"]]}} for r in dist_orden]
+    faltantes = sorted(({"label": f"Sin {n.lower()}", "value": num(v)} for n, v in falt.items()), key=lambda r: -r["value"])
+    secciones = [
+        seccion("Distribución de problemas", [lider(dist_orden, "label", "value", "casos", "los problemas detectados")], grafico,
+                alto=g.alto_ranking(len(dist_orden)),
+                explicacion="Rojo: errores críticos (sin contacto, duplicados). Naranja: inconsistencias (libreta, carné). "
+                            "Amarillo: datos inválidos (email sin @, celular corto, edades imposibles). Los duplicados cuentan "
+                            "documentos o emails repetidos, no candidatos.",
+                detalle="problema", ayuda_detalle="Hacé clic en un problema para ver los candidatos a corregir."),
+        seccion("Datos faltantes más comunes", [lider(faltantes, "label", "value", "candidatos")],
+                g.ranking(etiquetas(faltantes), valores(faltantes, "value"), "Candidatos", g.SERIES[1]), alto=g.alto_ranking(len(faltantes), 200),
+                explicacion="Candidatos sin cada dato básico."),
+        seccion("Problemas por perfil (top 15)", [],
+                g.columnas(etiquetas(por_perfil), {"Sin contacto": valores(por_perfil, "sin_contacto"),
+                                                   "Email inválido": valores(por_perfil, "email_invalido"),
+                                                   "Libreta sin categoría": valores(por_perfil, "libreta_sin_categoria")}, apiladas=True,
+                           colores=[g.NEGATIVO, g.ESTADO["atencion"], g.ESTADO["serio"]]), alto=360,
+                explicacion="Los tres problemas más frecuentes en los 15 perfiles con más candidatos.", detalle="perfil",
+                ayuda_detalle="Hacé clic en un tramo para ver esos candidatos."),
+    ]
+    return {
+        "kpis": [
+            kpi("Total candidatos", entero(total_c)),
+            kpi("Errores críticos", entero(criticos), "sin contacto y duplicados", alerta=criticos > 0),
+            kpi("Inconsistencias", entero(inconsist), "libreta y carné"),
+            kpi("Datos inválidos", entero(invalidos), "email, celular y edad"),
+            kpi("Total de problemas", entero(criticos + inconsist + invalidos)),
+        ],
+        "conclusiones": [
+            f"Se detectaron {entero(criticos + inconsist + invalidos)} problemas en {entero(total_c)} fichas.",
+            lider(dist_orden, "label", "value", "casos", "los problemas"),
+            f"{entero(dup_doc)} documentos aparecen repetidos." if dup_doc else "",
+        ],
+        "secciones": secciones,
+        "sugerencias": ["¿Qué errores de datos hay que corregir primero?", "¿Cuántos documentos están duplicados?"],
+        "contexto_ia": {"problemas": dist, "faltantes": faltantes},
+    }
+
+
+@catalogo.detalle("problemas-datos")
+def detalle_problemas_datos(clave, valor, serie, periodo, filtros):
+    w2, p2 = where(filtros, "c2")
+    params = []
+    if clave == "perfil":
+        cond_serie = {"Sin contacto": PROBLEMAS[0][1], "Email inválido": PROBLEMAS[1][1], "Libreta sin categoría": PROBLEMAS[3][1]}
+        condicion, params = f"RTRIM(pc.PerfilCandidatoDescripcion) = %s AND ({cond_serie.get(serie, '1=1')})", [valor]
+    elif valor == "Documento duplicado":
+        condicion, params = _DUP_DOC.format(w2=w2), p2
+    elif valor == "Email duplicado":
+        condicion, params = _DUP_EMAIL.format(w2=w2), p2
+    else:
+        condicion = next((c for n, c, _ in PROBLEMAS if n == valor), "1=0")
+    filas = _candidatos_contacto(filtros, condicion, params)
+    return respuesta_detalle(f"Candidatos · {valor}" + (f" · {serie}" if clave == "perfil" else ""), COLUMNAS_CONTACTO, filas)
