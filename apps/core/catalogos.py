@@ -39,6 +39,8 @@ CONSULTAS = {
                                 "FROM [CanalesPublicacionAvisos]",
     "PerfilesCandidatos": "SELECT [PerfilCandidatoId] AS Id, [PerfilCandidatoDescripcion] AS Descripcion "
                           "FROM [PerfilesCandidatos]",
+    "SituacionesLaborales": "SELECT [SituacionLaboralId] AS Id, [SituacionLaboralNombre] AS Descripcion "
+                            "FROM [SituacionesLaborales]",
     "Servicios": "SELECT [ServicioId] AS Id, [ServicioDescripcion] AS Descripcion FROM [Servicios]",
     "Monedas": "SELECT [moncod] AS Id, LTRIM(RTRIM(ISNULL([mondsc], ''))) + ' (' + LTRIM(RTRIM(ISNULL([monsmb], ''))) + ')' "
                "AS Descripcion FROM [Monedas]",
@@ -87,6 +89,7 @@ _EJEMPLO = {
                    5: "Ana Rodríguez", 6: "Gabriela Silva"},
     "CanalesPublicacionAvisos": {1: "Web Manpower", 2: "LinkedIn", 3: "Computrabajo", 4: "Referidos",
                                  5: "Gallito", 6: "Redes sociales"},
+    "SituacionesLaborales": {1: "Desocupado", 2: "Empleado", 3: "Estudiante", 4: "Independiente", 5: "Jubilado"},
     "Servicios": {1: "Trabajo temporal", 2: "Selección", 3: "RPO", 4: "Outsourcing", 5: "Evaluación", 6: "Capacitación"},
     "Monedas": {1: "Pesos uruguayos ($)", 2: "Dólares (U$S)"},
     "ClientesConOrdenes": {1: "Comercial del Sur", 2: "Industrias Oriental", 3: "Logística Atlántica",

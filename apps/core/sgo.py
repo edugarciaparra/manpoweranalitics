@@ -177,6 +177,8 @@ def _ejemplo(sql, params):
                 v = max(0, int(base_n * (1 - i / (n + 1)) * rnd.uniform(.85, 1)))
             elif (pozo := _pozo(bajo)) and not (_NUMERICAS.search(bajo) and not _TEXTO_PISTA.search(bajo)):
                 v = pozo[i % len(pozo)] if i < len(pozo) else f"{pozo[i % len(pozo)]} {i // len(pozo) + 1}"
+            elif re.search(r"puntaje|formacion|experiencia|score", bajo) and not re.search(r"total_|cant|count", bajo):
+                v = round(rnd.uniform(2.5, 4.6) * (2 if "total" in bajo else 1), 2)
             elif _PORCENTAJE.search(bajo):
                 v = round(rnd.uniform(35, 98), 1)
             elif _DINERO.search(bajo):
