@@ -1,11 +1,7 @@
 Django>=5.1,<5.3
 python-dotenv>=1.0
 sqlglot>=25,<31        # valida las consultas que arma la IA
-
-# Proveedor de IA: instalá solo el que uses
-# anthropic>=0.40          # IA_PROVEEDOR=claude
-# openai>=1.50             # IA_PROVEEDOR=openai o azure
-# google-generativeai>=0.8 # IA_PROVEEDOR=gemini
+# La IA se usa por HTTP: no hace falta instalar nada del proveedor
 
 # SQL Server (base de Manpower)
 mssql-django>=1.5,<2

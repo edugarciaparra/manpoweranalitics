@@ -155,9 +155,12 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- Asistente de IA -------------------------------------------------------
-# IA_PROVEEDOR: mock | claude | openai | azure | gemini
-# Con "mock" responde textos de ejemplo y no necesita clave.
+# Se conecta por HTTP a la API que se configure (ver apps/ia/proveedores.py).
+# IA_PROVEEDOR: mock | anthropic | openai (y compatibles) | azure | gemini
+# Con "mock" responde con datos de ejemplo y no necesita clave.
 IA_PROVEEDOR = env("IA_PROVEEDOR", "mock")
 IA_API_KEY = env("IA_API_KEY", "")
 IA_MODELO = env("IA_MODELO", "")
-IA_AZURE_ENDPOINT = env("IA_AZURE_ENDPOINT", "")
+IA_URL = env("IA_URL", "")
+IA_AZURE_ENDPOINT = env("IA_AZURE_ENDPOINT", "")  # nombre anterior de IA_URL para Azure
+IA_AZURE_VERSION = env("IA_AZURE_VERSION", "2024-10-21")
