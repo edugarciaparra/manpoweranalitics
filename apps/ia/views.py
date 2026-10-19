@@ -34,7 +34,7 @@ def consultar_pagina(request):
     return render(request, "ia/consultar.html", {
         "sugerencias": SUGERENCIAS,
         "pregunta_inicial": request.GET.get("q", "")[:500],
-        "modo_demo": settings.IA_PROVEEDOR == "mock",
+        "ia_configurada": bool(settings.IA_PROVEEDOR),
         "base_conectada": sgo_configurada(),
     })
 
@@ -105,9 +105,13 @@ def preguntar(request):
 
         from apps.core.filtros import leer_filtros
         consulta = QueryDict(str(cuerpo.get("filtros") or "").lstrip("?"))
-        datos = item["funcion"](periodo, leer_filtros(item["filtros"], consulta))
+        argumentos = (periodo, leer_filtros(item["filtros"], consulta))
     else:
-        datos = item["funcion"](periodo)
+        argumentos = (periodo,)
+    try:
+        datos = item["funcion"](*argumentos)
+    except Exception as e:  # noqa: BLE001
+        return JsonResponse({"error": f"No se pudieron leer los datos de la base: {e}"}, status=503)
     sistema = (
         "Sos un asistente de análisis para Manpower Uruguay. Respondé en español "
         "rioplatense, breve y con números concretos. El usuario está viendo el análisis "

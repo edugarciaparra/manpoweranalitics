@@ -1,9 +1,23 @@
+import logging
+
+from django.db import DatabaseError
 from django.http import Http404, JsonResponse
 from django.shortcuts import render
+
+from .db import BaseNoDisponible
 
 from .filtros import activos, leer_filtros, para_plantilla
 from .registry import obtener_catalogo, obtener_modulo, obtener_modulos
 from .utils import PERIODO_DEFECTO, PERIODOS
+
+log = logging.getLogger(__name__)
+ERRORES_BASE = (BaseNoDisponible, DatabaseError)
+
+
+def _mensaje_error(e):
+    if isinstance(e, BaseNoDisponible):
+        return str(e)
+    return f"La base de Manpower no respondió: {str(e)[:400]}"
 
 
 def landing(request):
@@ -45,7 +59,13 @@ def analisis(request, modulo, analisis):
 
     periodos, periodo = _periodo(request, item)
     filtros = leer_filtros(item["filtros"], request.GET)
-    datos = item["funcion"](periodo, filtros) if item["filtros"] else item["funcion"](periodo)
+    try:
+        datos = item["funcion"](periodo, filtros) if item["filtros"] else item["funcion"](periodo)
+    except ERRORES_BASE as e:
+        log.exception("Error de base en %s/%s", modulo, analisis)
+        return render(request, "core/error_base.html", {
+            "modulo": mod, "analisis": list(catalogo), "item": item, "mensaje": _mensaje_error(e),
+        }, status=503)
     datos["conclusiones"] = [c for c in datos.get("conclusiones", []) if c]
 
     return render(request, "core/analisis.html", {
@@ -96,10 +116,14 @@ def detalle(request, modulo, analisis):
 
     argumentos = [request.GET.get("clave", ""), request.GET.get("valor", ""),
                   request.GET.get("serie", ""), _periodo(request, item)[1]]
-    if item["filtros"]:
-        resultado = funcion(*argumentos, filtros=leer_filtros(item["filtros"], request.GET))
-    else:
-        resultado = funcion(*argumentos)
+    try:
+        if item["filtros"]:
+            resultado = funcion(*argumentos, filtros=leer_filtros(item["filtros"], request.GET))
+        else:
+            resultado = funcion(*argumentos)
+    except ERRORES_BASE as e:
+        log.exception("Error de base en el detalle de %s/%s", modulo, analisis)
+        return JsonResponse({"error": _mensaje_error(e)}, status=503)
     filas = resultado.get("filas", [])
     resultado["total"] = len(filas)
     resultado["filas"] = [[_celda(v) for v in f] for f in filas[:MAX_FILAS_DETALLE]]

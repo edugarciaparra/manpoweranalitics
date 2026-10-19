@@ -5,14 +5,12 @@ Solo se exponen las tablas de TABLAS_PERMITIDAS. Las columnas con datos
 personales de candidatos (nombres, documentos, contactos, direcciones) no se
 describen y el validador rechaza cualquier consulta que las use.
 
-Con la base conectada las columnas se leen de INFORMATION_SCHEMA (se guardan
-una hora). Sin conexión se usa ESQUEMA_EJEMPLO, con las columnas que ya
-conocemos, para poder probar la pantalla.
+Las columnas se leen de INFORMATION_SCHEMA de la base (se guardan una hora).
 """
 import re
 
 from apps.core.cache import cache_temporal
-from apps.core.db import consultar, sgo_configurada
+from apps.core.db import consultar
 
 TABLAS_PERMITIDAS = [
     # Operación
@@ -54,94 +52,6 @@ def es_columna_bloqueada(tabla, columna):
     return tabla in TABLAS_PERSONALES and bool(_PATRON_PERSONAL.search(columna))
 
 
-ESQUEMA_EJEMPLO = {
-    "Clientes": [
-        ("ClienteId", "int"), ("ClienteNombre", "varchar"), ("ClienteRazonSocial", "varchar"),
-        ("ClienteRUT", "varchar"), ("SectorActividadId", "int"), ("TipoClienteId", "int"),
-        ("EstadoClienteId", "int"), ("TendenciaId", "int"), ("ClienteFechaIngreso", "datetime"),
-        ("ClienteComprasAnuales", "decimal"), ("ClienteFacturacionAnual", "decimal"),
-        ("ClienteCantidadAsociadosManpow", "int"), ("ClienteCantidadAsociadosTotal", "int"),
-        ("ClienteOperaAdministrativa", "char"), ("ClienteOperaIndustrial", "char"),
-        ("ClienteOperaProfesional", "char"), ("ClienteOperaPromociones", "char"), ("ClienteOperaRPO", "char"),
-        ("ClienteUtilizaPersonalTemporal", "char"), ("ClienteRpoEjecutivoId", "int"),
-        ("ClientePrmEjecutivoId", "int"), ("ClienteProEjecutivoId", "int"), ("ClienteIndEjecutivoId", "int"),
-        ("ClienteAdmEjecutivoId", "int"),
-    ],
-    "Pedidos": [
-        ("PedidoId", "int"), ("PedidoNumero", "int"), ("ClienteId", "int"), ("DivisionId", "int"),
-        ("EstadoPedidoId", "int"), ("TipoPedidoId", "int"), ("PerfilCandidatoId", "int"),
-        ("PedidoFecha", "datetime"), ("PedidoFechaTopeEntrega", "datetime"),
-        ("PedidoFechaEntregaEfectiva", "datetime"), ("PedidoFechaCierre", "datetime"),
-        ("PedidoCantidadPersonas", "int"), ("TipoAsignacionId", "int"), ("PedidoDerivado", "char"),
-        ("PedidoTraspaso", "char"), ("MarcaId", "int"), ("LineaId", "int"), ("PracticeAreaId", "int"),
-        ("CentroCostoId", "int"),
-    ],
-    "Asignaciones": [
-        ("AsignacionId", "int"), ("PedidoId", "int"), ("CandidatoId", "int"), ("EstadoAsignacionId", "int"),
-        ("TipoAsignacionId", "int"), ("AsignacionEjecutivoId", "int"), ("AsignacionFechaIngreso", "datetime"),
-        ("AsignacionFechaEgreso", "datetime"), ("CausalBajaId", "int"),
-    ],
-    "Entrevistas": [
-        ("EntrevistaId", "int"), ("CandidatoId", "int"), ("EntrevistaPedidoId", "int"),
-        ("EntrevistaPsicologoId", "int"), ("EntrevistaCanalPublicacion", "int"), ("EntrevistaFecha", "datetime"),
-        ("EntrevistaEsGrupal", "char"), ("EntrevistaPuntajeFormacion", "varchar"), ("EntrevistaPuntajeExperiencia", "varchar"),
-        ("SituacionLaboralId", "int"), ("EntrevistaResumen", "varchar"),
-    ],
-    "OrdenesFacturacion": [
-        ("OrdenId", "int"), ("PedidoId", "int"), ("OrdenFecha", "datetime"), ("OrdenMonto", "decimal"),
-        ("OrdenServicioId", "int"), ("OrdenMonCod", "int"), ("OrdenResponsableId", "int"),
-    ],
-    "HistorialViaticos": [("ViaticoId", "int"), ("AsignacionId", "int"), ("PedidoId", "int"),
-                          ("HistorialViaticosFecha", "datetime"), ("HistorialViaticosImporte", "decimal"),
-                          ("HistorialViaticosObs", "varchar")],
-    "Candidatos": [
-        ("CandidatoId", "int"), ("WebUserId", "int"), ("CandidatoDepartamentoId", "int"),
-        ("CandidatoLocalidadId", "int"), ("CandidatoResidenciaId", "int"), ("CandidatoNacionalidadId", "int"),
-        ("PerfilCandidatoId", "int"), ("NivelEducativoId", "int"), ("EstadoCivilId", "int"),
-        ("SituacionLaboralId", "int"), ("CategoriaLibretaConducirId", "int"),
-    ],
-    "CandidatosWeb": [
-        ("WebUserId", "int"), ("WebUserNombre", "varchar"), ("WebUserApellido", "varchar"),
-        ("WebUserNroDocumento", "varchar"), ("WebUserEmail", "varchar"), ("WebUserCelular", "varchar"),
-        ("WebUserCv", "varchar"), ("DepartamentoId", "int"), ("LocalidadId", "int"), ("WebUserSexo", "char"),
-        ("WebUserFechaNacimiento", "datetime"), ("WebUserSalarioActual", "decimal"),
-        ("WebUserSalarioAspirado", "decimal"), ("WebUserSalarioAspiradoMoneda", "int"),
-        ("WebUserDisponibilidadHoraria", "char"), ("WebUserHorarioRotativo", "char"), ("WebUserZafrales", "char"),
-        ("WebUserLibretaConducir", "char"), ("WebUserEstadoCivilId", "int"), ("WebUserFechaAct", "datetime"),
-    ],
-    "CVExperiencia": [
-        ("WebUserId", "int"), ("CVExpId", "int"), ("CVExpEmpresa", "varchar"), ("CVExpCargo", "varchar"),
-        ("CVExpFechaIngreso", "datetime"), ("CVExpFechaEgreso", "datetime"), ("CVExpTrabajoActual", "char"),
-        ("CausalBajaId", "int"),
-    ],
-    "CVFormacion": [
-        ("WebUserId", "int"), ("CVFormId", "int"), ("CursoId", "int"), ("CVFormCompleto", "char"),
-        ("CVFormInstitucion", "varchar"), ("CVFormFechaInicio", "datetime"), ("CVFormFechaFin", "datetime"),
-    ],
-    "CVIdiomas": [("WebUserId", "int"), ("CVIdiomaId", "int"), ("CVIdiomaNivel", "int"), ("CVIdiomaAniosExp", "int")],
-    "SectoresActividad": [("SectorActividadId", "int"), ("SectorActividadDescripcion", "varchar")],
-    "TiposCliente": [("TipoClienteId", "int"), ("TipoClienteDescripcion", "varchar")],
-    "EstadosCliente": [("EstadoClienteId", "int"), ("EstadoClienteDescripcion", "varchar")],
-    "Tendencias": [("TendenciaId", "int"), ("TendenciaDescripcion", "varchar")],
-    "EjecutivosCuenta": [("EjecutivoCuentaId", "int"), ("EjecutivoCuentaNombre", "varchar"),
-                         ("EjecutivoCuentaApellido", "varchar"), ("EjecutivoCuentaEstado", "char")],
-    "Divisiones": [("DivisionId", "int"), ("DivisionDescripcion", "varchar")],
-    "EstadosPedido": [("EstadoPedidoId", "int"), ("EstadoPedidoDescripcion", "varchar")],
-    "TiposPedido": [("TipoPedidoId", "int"), ("TipoPedidoDescripcion", "varchar")],
-    "EstadosAsignacion": [("EstadoAsignacionId", "int"), ("EstadoAsignacionDescripcion", "varchar")],
-    "Servicios": [("ServicioId", "int"), ("ServicioDescripcion", "varchar")],
-    "Monedas": [("moncod", "int"), ("mondsc", "varchar")],
-    "Psicologos": [("PsicologoId", "int"), ("PsicologoNombre", "varchar"), ("PsicologoApellido", "varchar")],
-    "CanalesPublicacionAvisos": [("CanalPublicacionId", "int"), ("CanalPublicacionDescripcion", "varchar")],
-    "CausalesBaja": [("CausalBajaId", "int"), ("CausalBajaDescripcion", "varchar")],
-    "Departamentos": [("DepartamentoId", "int"), ("DepartamentoNombre", "varchar")],
-    "Localidades": [("LocalidadId", "int"), ("LocalidadNombre", "varchar")],
-    "EstadosCiviles": [("EstadoCivilId", "int"), ("EstadoCivilDescripcion", "varchar")],
-    "NivelesEducativos": [("NivelEducativoId", "int"), ("NivelEducativoDescripcion", "varchar")],
-    "CursosCarreras": [("CursoId", "int"), ("CursoNombre", "varchar"), ("NivelEducativoId", "int")],
-    "Competencias": [("CompetenciaId", "int"), ("CompetenciaNombre", "varchar")],
-}
-
 _CONSULTA_COLUMNAS = """
 SELECT c.[TABLE_NAME] AS Tabla, c.[COLUMN_NAME] AS Columna, c.[DATA_TYPE] AS Tipo
 FROM INFORMATION_SCHEMA.COLUMNS c
@@ -153,24 +63,18 @@ ORDER BY c.[TABLE_NAME], c.[ORDINAL_POSITION]
 @cache_temporal(segundos=60 * 60)
 def columnas_por_tabla():
     """{tabla: [(columna, tipo), ...]} solo con tablas permitidas y sin columnas bloqueadas."""
-    if sgo_configurada():
-        sql = _CONSULTA_COLUMNAS.format(marcas=", ".join(["%s"] * len(TABLAS_PERMITIDAS)))
-        crudo = {}
-        for f in consultar(sql, TABLAS_PERMITIDAS):
-            crudo.setdefault(f["Tabla"], []).append((f["Columna"], f["Tipo"]))
-    else:
-        crudo = ESQUEMA_EJEMPLO
+    sql = _CONSULTA_COLUMNAS.format(marcas=", ".join(["%s"] * len(TABLAS_PERMITIDAS)))
+    crudo = {}
+    for f in consultar(sql, TABLAS_PERMITIDAS):
+        crudo.setdefault(f["Tabla"], []).append((f["Columna"], f["Tipo"]))
     return {t: [(c, tipo) for c, tipo in cols if not es_columna_bloqueada(t, c)]
             for t, cols in crudo.items()}
 
 
 def columnas_bloqueadas():
     """Nombres de columna (en minúscula) que nunca pueden aparecer en una consulta."""
-    if sgo_configurada():
-        sql = _CONSULTA_COLUMNAS.format(marcas=", ".join(["%s"] * len(TABLAS_PERMITIDAS)))
-        filas = [(f["Tabla"], f["Columna"]) for f in consultar(sql, TABLAS_PERMITIDAS)]
-    else:
-        filas = [(t, c) for t, cols in ESQUEMA_EJEMPLO.items() for c, _ in cols]
+    sql = _CONSULTA_COLUMNAS.format(marcas=", ".join(["%s"] * len(TABLAS_PERMITIDAS)))
+    filas = [(f["Tabla"], f["Columna"]) for f in consultar(sql, TABLAS_PERMITIDAS)]
     return {c.lower() for t, c in filas if es_columna_bloqueada(t, c)}
 
 

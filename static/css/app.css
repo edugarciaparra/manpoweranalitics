@@ -757,6 +757,6 @@ body { background: var(--papel); color: var(--tinta); }
 .btn-aplicar:hover { background: var(--mp-azul-osc); }
 .tabla-sgo td.num, .tabla-sgo th.num { text-align: right; }
 
-/* Aviso de datos de ejemplo (base sin conectar) */
-.aviso-ejemplo { background: #FFF4D6; color: #6B4A00; border-bottom: 1px solid #F2D58A; padding: .7rem 0; font-size: .9rem; }
+/* Aviso de base sin conectar */
+.aviso-ejemplo { background: #FDECEA; color: #8A1C14; border-bottom: 1px solid #F3B8B3; padding: .7rem 0; font-size: .9rem; }
 .aviso-ejemplo code { background: rgba(0,0,0,.06); color: inherit; padding: 0 .3rem; border-radius: 4px; }

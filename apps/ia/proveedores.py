@@ -10,7 +10,6 @@ Se configura en el .env y sirve la API de cualquier empresa:
     IA_PROVEEDOR=azure       Azure OpenAI (IA_URL = https://<recurso>.openai.azure.com,
                              IA_MODELO = nombre del deployment)
     IA_PROVEEDOR=gemini      Google Gemini (por su API compatible con OpenAI)
-    IA_PROVEEDOR=mock        sin IA: respuestas de ejemplo para probar la pantalla
 
     IA_API_KEY   clave de la API
     IA_MODELO    modelo (vacío = el de MODELOS_POR_DEFECTO)
@@ -71,7 +70,6 @@ def _post(url, cuerpo, encabezados):
 
 class ProveedorIA:
     nombre = "base"
-    simulado = False
 
     @property
     def modelo(self):
@@ -86,20 +84,6 @@ class ProveedorIA:
 
     def responder(self, sistema: str, pregunta: str) -> str:
         return self.completar(sistema, [{"role": "user", "content": pregunta}])
-
-
-class MockProveedor(ProveedorIA):
-    """Respuestas fijas para desarrollar la interfaz sin gastar tokens."""
-    nombre = "mock"
-    simulado = True
-
-    def completar(self, sistema, mensajes, max_tokens=1500):
-        pregunta = mensajes[-1]["content"] if mensajes else ""
-        return (
-            f"Respuesta de ejemplo a: «{pregunta}».\n\n"
-            "El asistente todavía no está conectado a una IA. Configurá IA_PROVEEDOR, "
-            "IA_API_KEY e IA_MODELO en el archivo .env."
-        )
 
 
 class AnthropicProveedor(ProveedorIA):
@@ -153,11 +137,14 @@ class AzureProveedor(OpenAIProveedor):
 
 
 PROVEEDORES = {p.nombre: p for p in
-               [MockProveedor, AnthropicProveedor, OpenAIProveedor, AzureProveedor, GeminiProveedor]}
+               [AnthropicProveedor, OpenAIProveedor, AzureProveedor, GeminiProveedor]}
 
 
 def get_proveedor() -> ProveedorIA:
-    nombre = (settings.IA_PROVEEDOR or "mock").strip().lower()
+    nombre = (settings.IA_PROVEEDOR or "").strip().lower()
+    if not nombre:
+        raise ErrorIA("El asistente no está configurado: completá IA_PROVEEDOR e IA_API_KEY en el archivo .env "
+                      "y reiniciá el servidor.")
     clase = PROVEEDORES.get(ALIAS.get(nombre, nombre))
     if clase is None:
         raise ValueError(

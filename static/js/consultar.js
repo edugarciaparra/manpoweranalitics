@@ -111,7 +111,6 @@
     const meta = [];
     if (datos.filas) meta.push(`${datos.filas.length.toLocaleString("es-UY")} filas` + (datos.recortado ? " (recortado)" : ""));
     if (datos.segundos != null) meta.push(`${nfCorto.format(datos.segundos)} s`);
-    if (datos.demo) meta.push("datos de ejemplo");
     turno.querySelector(".nl-meta").textContent = meta.join(" · ");
     pintarTexto(turno.querySelector(".nl-respuesta"), datos.respuesta);
     if (datos.tipo === "aclaracion") tarjeta.classList.add("nl-aclaracion");

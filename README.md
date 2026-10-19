@@ -2,7 +2,7 @@
 
 Portal de análisis en Django: una landing desde la que se entra a cada módulo
 (Pedidos, Facturación, Clientes, Candidatos), cada uno con KPIs, gráfico, tabla
-y un asistente de IA. **Por ahora los datos son de ejemplo, fijos en el código.**
+y un asistente de IA. **Todos los datos se leen de la base sgo_new**: no hay datos de ejemplo.
 
 ## Levantar en local (Windows / PyCharm)
 
@@ -29,14 +29,13 @@ manpower_analytics/
 │   │   ├── registry.py     descubre los módulos listados en settings
 │   │   ├── graficos.py     estilo común de los gráficos ECharts
 │   │   ├── estadistica.py  tendencia, estacionalidad y pronóstico
-│   │   ├── datos_ejemplo.py procesos de selección de ejemplo (Candidatos y Entrevistas)
 │   │   ├── db.py           acceso a sgo_new
 │   │   └── utils.py        períodos, fechas, formatos ($, %, números)
 │   ├── ia/                 asistente (proveedor intercambiable)
 │   ├── pedidos/            ┐
 │   ├── facturacion/        │ un módulo = una app:
 │   ├── clientes/           │   modulo.py    título, ícono, color, resumen para la landing
-│   ├── candidatos/         │   services.py  datos (hoy de ejemplo, después sgo_new)
+│   ├── candidatos/         │   services.py  consultas a sgo_new
 │   └── entrevistas/        ┘   analisis.py  los análisis del módulo, uno por función
 ├── templates/
 │   ├── base.html
@@ -106,7 +105,7 @@ python manage.py probar_sgo
 
 - Las tablas internas de Django van a SQLite; en `sgo_new` no se crea ni se migra nada.
 - Los módulos leen con `apps.core.db.consultar(sql, params)`, que devuelve una lista de dicts.
-- Si `SGO_DB_HOST` queda vacío, el proyecto sigue andando con los datos de ejemplo.
+- La conexión es obligatoria: si `SGO_DB_HOST` está vacío o la base no responde, cada pantalla muestra el error.
 - Las variables llevan prefijo `SGO_` para no chocar con un `DB_USER` definido en Windows,
   y el `.env` siempre le gana a las variables del sistema.
 
@@ -115,21 +114,21 @@ python manage.py probar_sgo
 Las descripciones (motivos de baja, niveles educativos, cursos, idiomas,
 departamentos, localidades, estados civiles) nunca se escriben en el código:
 salen de sus tablas en `sgo_new` con JOIN, o desde `apps/core/catalogos.py`
-(`catalogo("CausalesBaja")`, `cursos()`, ...). Sin la base conectada, ese archivo
-usa tablas de ejemplo con la misma estructura (Id → descripción).
+(`catalogo("CausalesBaja")`, `cursos()`, ...).
 
 Los datos se guardan 15 minutos en memoria (`apps/core/cache.py`) para no
 consultar la base en cada pantalla.
 
 ## Asistente de IA
 
-En `.env`, `IA_PROVEEDOR=mock` responde textos de ejemplo sin clave.
-Para usar un modelo real, cambiá a `claude`, `openai`, `azure` o `gemini`,
-completá `IA_API_KEY` e `IA_MODELO` e instalá el SDK correspondiente
-(está comentado en `requirements.txt`). No hay que tocar código.
+En `.env`: `IA_PROVEEDOR` (`anthropic`, `openai` y compatibles, `azure`, `gemini`),
+`IA_API_KEY` y opcionalmente `IA_MODELO` / `IA_URL`. Se conecta por HTTP, sin instalar nada.
+
+La IA nunca se conecta a la base. En «Preguntale a la base» arma el SQL, el portal
+lo valida (solo lectura, tablas permitidas, sin datos personales) y lo ejecuta, y
+la IA solo redacta la respuesta sobre esas filas. En el asistente de cada pantalla
+recibe los números que esa pantalla ya leyó de la base.
 
 ## Pendiente
 
-- Pasar cada módulo de datos de ejemplo a consultas reales en `sgo_new`
 - Login (hoy el nombre del usuario está fijo en `apps/core/views.py`)
-- Conectar el asistente a un proveedor real

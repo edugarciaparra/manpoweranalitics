@@ -113,8 +113,7 @@ WSGI_APPLICATION = "config.wsgi.application"
 # "default": SQLite, solo para las tablas internas de Django (sesiones, admin),
 #            así no se crea nada en la base de Manpower.
 # "sgo":     SQL Server de Manpower, solo para leer datos en los módulos.
-#            Si SGO_DB_HOST está vacío no se configura y los módulos usan
-#            los datos de ejemplo.
+#            Es obligatoria: sin SGO_DB_HOST las pantallas muestran el error de conexión.
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
@@ -158,9 +157,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- Asistente de IA -------------------------------------------------------
 # Se conecta por HTTP a la API que se configure (ver apps/ia/proveedores.py).
-# IA_PROVEEDOR: mock | anthropic | openai (y compatibles) | azure | gemini
-# Con "mock" responde con datos de ejemplo y no necesita clave.
-IA_PROVEEDOR = env("IA_PROVEEDOR", "mock")
+# IA_PROVEEDOR: anthropic | openai (y compatibles) | azure | gemini
+# La IA nunca se conecta a la base: el portal ejecuta el SQL y le pasa el resultado.
+IA_PROVEEDOR = env("IA_PROVEEDOR", "")
 IA_API_KEY = env("IA_API_KEY", "")
 IA_MODELO = env("IA_MODELO", "")
 IA_URL = env("IA_URL", "")

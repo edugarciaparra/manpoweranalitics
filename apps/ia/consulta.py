@@ -23,9 +23,8 @@ from decimal import Decimal
 
 from django.db import connections
 
-from apps.core.db import ALIAS, sgo_configurada
+from apps.core.db import ALIAS, BaseNoDisponible, sgo_configurada
 
-from . import demo
 from .conocimiento import CODIGOS, RELACIONES
 from .esquema import texto_esquema
 from .graficos import armar_grafico
@@ -145,8 +144,6 @@ def _generar_y_ejecutar(proveedor, pregunta, historial):
         try:
             sql = validar(sql)
             plan["sql"] = sql
-            if not sgo_configurada():
-                return plan, None
             return plan, ejecutar(sql)
         except (ConsultaNoPermitida, Exception) as e:  # noqa: BLE001
             ultimo_error = e
@@ -175,22 +172,16 @@ def _redactar(proveedor, pregunta, plan, columnas, filas, recortado):
 def responder_pregunta(pregunta, historial=None):
     """Devuelve un dict listo para mandar en JSON a la pantalla."""
     inicio = time.monotonic()
+    if not sgo_configurada():
+        raise BaseNoDisponible("El portal no está conectado a la base de Manpower: completá SGO_DB_HOST en el archivo .env "
+                               "y reiniciá el servidor.")
     proveedor = get_proveedor()
-
-    if proveedor.simulado:
-        resultado = demo.responder(pregunta)
-        resultado["segundos"] = round(time.monotonic() - inicio, 1)
-        return resultado
 
     plan, datos = _generar_y_ejecutar(proveedor, pregunta, historial)
     if plan.get("aclaracion"):
         return {"tipo": "aclaracion", "respuesta": plan["aclaracion"]}
 
     base = {"titulo": plan.get("titulo", ""), "explicacion": plan.get("explicacion", ""), "sql": plan["sql"]}
-    if datos is None:
-        return {**base, "tipo": "sin_base",
-                "respuesta": "La consulta está lista, pero la base de Manpower no está conectada en este entorno. "
-                             "Completá SGO_DB_HOST en el .env para ejecutarla."}
 
     columnas, filas, recortado = datos
     respuesta = _redactar(proveedor, pregunta, plan, columnas, filas, recortado) if filas else \

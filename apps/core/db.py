@@ -13,14 +13,25 @@ from django.db import connections
 
 ALIAS = "sgo"
 
+# Solo para las pruebas automáticas: una función (sql, params) -> filas que
+# reemplaza a la base. En el portal siempre es None y se consulta la base real.
+SUSTITUTO_PRUEBAS = None
+
+
+class BaseNoDisponible(RuntimeError):
+    """No hay conexión configurada o la base no respondió."""
+
 
 def sgo_configurada():
-    return ALIAS in settings.DATABASES
+    return SUSTITUTO_PRUEBAS is not None or ALIAS in settings.DATABASES
 
 
 def consultar(sql, params=None):
-    if not sgo_configurada():
-        raise RuntimeError("La base de Manpower no está configurada: completá SGO_DB_HOST en el .env.")
+    if SUSTITUTO_PRUEBAS is not None:
+        return SUSTITUTO_PRUEBAS(sql, params or [])
+    if ALIAS not in settings.DATABASES:
+        raise BaseNoDisponible("El portal no está conectado a la base de Manpower: completá SGO_DB_HOST en el archivo .env "
+                               "y reiniciá el servidor.")
     with connections[ALIAS].cursor() as cursor:
         cursor.execute(sql, params or [])
         columnas = [c[0] for c in cursor.description]

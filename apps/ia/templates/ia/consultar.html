@@ -11,8 +11,8 @@
     <p class="nl-sub">Escribí la pregunta como se la harías a un analista. Se arma la consulta, se ejecuta sobre sgo_new
       y te devuelve la respuesta con su gráfico y los datos.</p>
     <div class="nl-estado">
-      {% if modo_demo %}
-      <span class="nl-chip nl-chip-aviso"><i class="bi bi-cone-striped" aria-hidden="true"></i> Modo demostración: respuestas de ejemplo. Para usar la IA, completá IA_PROVEEDOR e IA_API_KEY en el .env</span>
+      {% if not ia_configurada %}
+      <span class="nl-chip nl-chip-aviso"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Asistente sin configurar: completá IA_PROVEEDOR e IA_API_KEY en el .env</span>
       {% endif %}
       {% if base_conectada %}
       <span class="nl-chip nl-chip-ok"><i class="bi bi-database-check" aria-hidden="true"></i> Base conectada</span>

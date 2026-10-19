@@ -25,7 +25,10 @@ def obtener_modulos(con_resumen=False):
         datos["url"] = reverse("core:modulo", args=[datos["slug"]])
         datos["cantidad_analisis"] = len(list(obtener_catalogo(datos["slug"]) or []))
         if con_resumen:
-            datos["resumen"] = mod.resumen()
+            try:
+                datos["resumen"] = mod.resumen()
+            except Exception:  # noqa: BLE001  (sin base, la tarjeta del módulo se muestra sin cifras)
+                datos["resumen"] = []
         modulos.append(datos)
     return modulos
 

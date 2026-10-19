@@ -6,16 +6,12 @@ tendencia y ejecutivos salen de sus tablas con JOIN, y la actividad de cada
 cliente (último pedido, pedidos y facturación de los últimos 12 meses y de los
 12 anteriores) se calcula en SQL Server a partir de [Pedidos] y
 [OrdenesFacturacion].
-
-Sin conexión se generan clientes de ejemplo que guardan los Id y buscan las
-descripciones en las tablas de referencia (apps/core/catalogos.py).
 """
-import random
-from datetime import date, timedelta
+from datetime import date
 
 from apps.core.cache import cache_temporal
 from apps.core.catalogos import catalogo
-from apps.core.db import consultar, sgo_configurada
+from apps.core.db import consultar
 
 # Códigos reales (consulta del 18/10/2026)
 SI = "S"                 # ClienteOpera... y ClienteUtilizaPersonalTemporal: S / N
@@ -136,79 +132,9 @@ def _desde_sgo():
     return tuple(filas)
 
 
-# --- Datos de ejemplo -------------------------------------------------------
-_PREFIJOS = ["Grupo", "Comercial", "Industrias", "Servicios", "Distribuidora", "Logística", "Laboratorios",
-             "Hoteles", "Agro", "Tecno", "Constructora", "Farmacias", "Transportes", "Alimentos"]
-_SUFIJOS = ["del Sur", "Oriental", "Andina", "Rioplatense", "Atlántica", "Central", "del Norte", "del Plata",
-            "Uruguaya", "Integral", "del Este", "Costera", "Unida", "Moderna", "Federal"]
-
-
-def _ejemplo():
-    r = random.Random(77)
-    hoy = date.today()
-    sectores, tipos = catalogo("SectoresActividad"), catalogo("TiposCliente")
-    estados, tendencias = catalogo("EstadosCliente"), catalogo("Tendencias")
-    ejecutivos = catalogo("EjecutivosCuenta")
-    ids_sector, ids_tipo, ids_estado = sorted(sectores), sorted(tipos), sorted(estados)
-    ids_tend, ids_ejec = sorted(tendencias), sorted(ejecutivos)
-
-    filas, usados = [], set()
-    for i in range(420):
-        nombre = f"{r.choice(_PREFIJOS)} {r.choice(_SUFIJOS)}"
-        if nombre in usados:  # hay menos combinaciones que clientes: se numeran las repetidas
-            n = 2
-            while f"{nombre} {n}" in usados:
-                n += 1
-            nombre = f"{nombre} {n}"
-        usados.add(nombre)
-        # Distribución de estados parecida a una cartera real: mayoría activos, después inactivos y potenciales
-        peso_estado = {ESTADO_ACTIVO_ID: 55, 4: 15, 6: 10, 5: 7, 3: 4, 7: 3, 8: 3, 9: 2, 1: 1}
-        estado_id = r.choices(ids_estado, weights=[peso_estado.get(x, 1) for x in ids_estado])[0]
-        activo = estado_id == ESTADO_ACTIVO_ID
-        tamano = r.choices([6, 2.5, 1], weights=[18, 37, 45])[0]
-        total = max(5, int(r.lognormvariate(4.2, 1.0) * tamano))
-        mp = min(total, int(total * r.betavariate(1.3, 6))) if activo or r.random() < .3 else 0
-        ingreso = hoy - timedelta(days=int(r.random() ** .8 * 365 * 22))
-
-        # Actividad: los activos piden más; algunos están "dormidos"
-        if activo:
-            dias = int(r.expovariate(1 / 45)) if r.random() > .18 else r.randint(120, 400)
-        else:
-            dias = r.randint(200, 1500) if r.random() > .15 else None
-        base_pedidos = max(0, int(r.gauss(tamano * 3, tamano)))
-        p12 = base_pedidos if activo and dias is not None and dias < 365 else 0
-        prev = max(0, int(base_pedidos * r.uniform(.6, 1.4))) if dias is not None else 0
-        ticket = r.uniform(25000, 60000)
-
-        lineas = {campo: r.random() < pr for campo, pr in zip(LINEAS.values(), [.55, .38, .22, .18, .08])}
-        if not any(lineas.values()):
-            lineas["opera_adm"] = True
-        roles = [rol for rol, campo in zip(ROLES_EJECUTIVO, ["opera_rpo", "opera_promo", "opera_pro", "opera_ind", "opera_adm"])
-                 if lineas[campo]]
-        ejecutivo_principal = r.choice(ids_ejec)
-        filas.append(_completar({
-            "id": 2000 + i, "nombre": nombre, "razon_social": f"{nombre} S.A.",
-            "rut": r.randint(210000000000, 219999999999),
-            # Descripciones por Id desde las tablas de referencia (como el JOIN de la consulta real)
-            "sector": sectores[r.choice(ids_sector)], "tipo": tipos[r.choices(ids_tipo, weights=[30, 52, 8, 10][:len(ids_tipo)])[0]],
-            "estado_id": estado_id, "estado": estados[estado_id],
-            "tendencia": tendencias[r.choices(ids_tend, weights=[28, 47, 25][:len(ids_tend)])[0]],
-            "fecha_ingreso": ingreso,
-            "compras_anuales": round(total * r.uniform(8000, 22000), -3),
-            "facturacion_cliente": round(total * r.uniform(1.5e6, 4e6), -4),
-            "asociados_mp": mp, "asociados_total": total,
-            **lineas, "usa_temporal": activo and r.random() < .8,
-            "ejecutivos": {rol: ejecutivos[ejecutivo_principal if r.random() < .7 else r.choice(ids_ejec)] for rol in roles},
-            "ultimo_pedido": hoy - timedelta(days=dias) if dias is not None else None,
-            "pedidos_12m": p12, "pedidos_prev": prev,
-            "facturado_12m": round(p12 * ticket, -3), "facturado_prev": round(prev * ticket * r.uniform(.85, 1.1), -3),
-        }))
-    return tuple(filas)
-
-
 @cache_temporal()
 def clientes():
-    return _desde_sgo() if sgo_configurada() else _ejemplo()
+    return _desde_sgo()
 
 
 def estado_activo():
