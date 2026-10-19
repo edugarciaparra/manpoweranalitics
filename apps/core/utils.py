@@ -13,7 +13,7 @@ MESES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun",
 
 
 def hace(dias):
-    """Fecha relativa a hoy, para que los datos de ejemplo no envejezcan."""
+    """Fecha que cae `dias` días antes de hoy."""
     return date.today() - timedelta(days=dias)
 
 
