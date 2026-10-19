@@ -602,7 +602,7 @@ body { background: var(--papel); color: var(--tinta); }
 .nl-chip-ok { background: rgba(27, 175, 122, .25); color: #D4F7E8; }
 .nl-chip-aviso { background: rgba(237, 161, 0, .25); color: #FFEBC2; }
 
-.nl-cuerpo { margin-top: -2.8rem; position: relative; padding-bottom: 2rem; max-width: 1080px; }
+.nl-cuerpo { margin: -2.8rem auto 0; position: relative; padding-bottom: 2rem; max-width: 1080px; }
 
 .nl-sugerencias { background: #fff; border-radius: 1.1rem; box-shadow: var(--sombra); padding: 1.1rem 1.2rem; margin-bottom: 1.2rem; }
 .nl-sugerencias-titulo { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: var(--tinta-suave); font-weight: 700; margin: 0 0 .7rem; }
@@ -760,3 +760,27 @@ body { background: var(--papel); color: var(--tinta); }
 /* Aviso de base sin conectar */
 .aviso-ejemplo { background: #FDECEA; color: #8A1C14; border-bottom: 1px solid #F3B8B3; padding: .7rem 0; font-size: .9rem; }
 .aviso-ejemplo code { background: rgba(0,0,0,.06); color: inherit; padding: 0 .3rem; border-radius: 4px; }
+
+/* Preguntale a Rafa (dentro de cada módulo) */
+.rafa-cabecera { display: flex; gap: 1rem; align-items: center; margin-bottom: 1.25rem; }
+.rafa-avatar { flex: none; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--c, #0B5CAB); color: #fff; font-weight: 800; font-size: 1.35rem; box-shadow: 0 4px 14px rgba(6, 47, 95, .18); }
+.rafa-cabecera h1 { margin: 0; }
+.rafa-cabecera .sub { margin: .15rem 0 0; }
+.rafa .nl-cuerpo { margin-top: 0; max-width: none; }
+.rafa .nl-icono { background: var(--c, #0B5CAB); color: #fff; font-weight: 800; }
+.menu-lista a.menu-rafa { font-weight: 600; color: var(--c, #0B5CAB); }
+.menu-lista li.menu-separador { border-top: 1px solid var(--linea); margin: .4rem .6rem; }
+.rafa-teaser { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; justify-content: space-between;
+  background: #fff; border: 1px solid var(--linea); border-left: 4px solid var(--c, #0B5CAB); border-radius: 12px;
+  padding: 1rem 1.25rem; margin-bottom: 1.25rem; }
+.rafa-teaser-texto { display: flex; gap: .85rem; align-items: center; }
+.rafa-teaser .rafa-avatar { width: 42px; height: 42px; font-size: 1.1rem; }
+.rafa-teaser strong { display: block; }
+.rafa-teaser-preguntas { display: flex; flex-wrap: wrap; gap: .4rem; }
+.rafa-teaser-preguntas a { font-size: .82rem; padding: .3rem .7rem; border-radius: 999px; background: #F2F5FA;
+  color: var(--tinta, #14213D); text-decoration: none; border: 1px solid var(--linea); }
+.rafa-teaser-preguntas a:hover { border-color: var(--c, #0B5CAB); color: var(--c, #0B5CAB); }
+.menu-lista a.menu-rafa.activo { color: #fff; }
+.rafa .nl-chip { background: #fff; color: var(--tinta-suave, #5B6577); border: 1px solid var(--linea, #E7EAF0); }
+.rafa .nl-chip-aviso { background: #FFF4D6; color: #6B4A00; border-color: #F2D58A; }

@@ -14,6 +14,22 @@
         <p class="sub">{{ modulo.descripcion }}</p>
       </header>
 
+      <div class="rafa-teaser">
+        <div class="rafa-teaser-texto">
+          <span class="rafa-avatar" aria-hidden="true">R</span>
+          <div>
+            <strong>Preguntale a Rafa</strong>
+            <span class="sub">Hacé cualquier pregunta sobre {{ modulo.titulo|lower }} o probá una de estas.</span>
+          </div>
+        </div>
+        <div class="rafa-teaser-preguntas">
+          {% for q in modulo.preguntas|slice:":3" %}
+          <a href="{% url 'core:rafa' modulo.slug %}?q={{ q|urlencode }}">{{ q }}</a>
+          {% endfor %}
+          <a href="{% url 'core:rafa' modulo.slug %}"><i class="bi bi-chat-dots" aria-hidden="true"></i> Otra pregunta</a>
+        </div>
+      </div>
+
       <div class="lista-analisis">
         {% for a in analisis %}
         <a class="tarjeta-analisis" href="{% url 'core:analisis' modulo.slug a.slug %}">

@@ -1,0 +1,74 @@
+{# Conversación con el asistente: sugerencias, respuestas (gráfico, datos, SQL) y caja de pregunta #}
+<div class="nl-cuerpo">
+  <div class="nl-sugerencias" id="nl-sugerencias">
+    <h2 class="nl-sugerencias-titulo">{{ titulo_sugerencias|default:"Probá con" }}</h2>
+    <div class="nl-sugerencias-lista">
+      {% for s in sugerencias %}
+      <button type="button" class="nl-sugerencia" data-pregunta="{{ s }}"><i class="bi bi-arrow-return-right" aria-hidden="true"></i>{{ s }}</button>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="nl-conversacion" id="nl-conversacion" aria-live="polite"></div>
+
+  <form class="nl-compositor" id="nl-form" data-url="{% url 'ia:consultar_api' %}" data-inicial="{{ pregunta_inicial }}" data-modulo="{{ modulo_rafa|default:'' }}">
+    {% csrf_token %}
+    <label for="nl-pregunta" class="visually-hidden">Tu pregunta</label>
+    <textarea id="nl-pregunta" rows="1" maxlength="1000"
+              placeholder="Ej.: ¿qué clientes pidieron más personal este año?" required></textarea>
+    <button type="button" class="nl-nueva" id="nl-nueva" title="Empezar de nuevo (olvida las preguntas anteriores)">
+      <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i><span class="visually-hidden">Empezar de nuevo</span>
+    </button>
+    <button type="submit" class="nl-enviar" id="nl-enviar">
+      <i class="bi bi-send-fill" aria-hidden="true"></i><span class="d-none d-sm-inline">Preguntar</span>
+    </button>
+  </form>
+  <p class="nl-ayuda">Podés seguir preguntando sobre la respuesta anterior: «¿y por división?», «solo los activos».</p>
+</div>
+
+<template id="nl-plantilla">
+  <article class="nl-turno">
+    <div class="nl-yo"></div>
+    <div class="nl-tarjeta">
+      <header class="nl-tarjeta-cabeza">
+        <span class="nl-icono" aria-hidden="true">{% if modulo_rafa %}R{% else %}<i class="bi bi-stars"></i>{% endif %}</span>
+        <div class="nl-tarjeta-titulos">
+          <h3 class="nl-tarjeta-titulo">{% if modulo_rafa %}Rafa está analizando…{% else %}Analizando…{% endif %}</h3>
+          <p class="nl-meta"></p>
+        </div>
+      </header>
+      <div class="nl-respuesta"><span class="nl-cargando"><span></span><span></span><span></span></span></div>
+      <div class="nl-vistas" hidden>
+        <nav class="nl-pestanas" role="tablist">
+          <button type="button" role="tab" data-vista="grafico"><i class="bi bi-bar-chart-line" aria-hidden="true"></i> Gráfico</button>
+          <button type="button" role="tab" data-vista="tabla"><i class="bi bi-table" aria-hidden="true"></i> Datos</button>
+          <button type="button" role="tab" data-vista="sql"><i class="bi bi-code-slash" aria-hidden="true"></i> Consulta SQL</button>
+          <span class="nl-pestanas-acciones">
+            <button type="button" class="nl-accion" data-accion="exportar"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</button>
+          </span>
+        </nav>
+        <div class="nl-vista" data-vista="grafico"><div class="nl-grafico"></div></div>
+        <div class="nl-vista" data-vista="tabla">
+          <div class="nl-tabla-barra">
+            <div class="detalle-buscar">
+              <i class="bi bi-search" aria-hidden="true"></i>
+              <input type="search" class="nl-filtro" placeholder="Buscar en los datos…" aria-label="Buscar en los datos">
+            </div>
+            <span class="nl-cuenta"></span>
+          </div>
+          <div class="table-responsive"><table class="table tabla align-middle mb-0"><thead></thead><tbody></tbody></table></div>
+          <nav class="paginado nl-paginado" aria-label="Páginas">
+            <button type="button" class="btn-icono" data-paso="-1" aria-label="Página anterior"><i class="bi bi-chevron-left"></i></button>
+            <span class="nl-pagina"></span>
+            <button type="button" class="btn-icono" data-paso="1" aria-label="Página siguiente"><i class="bi bi-chevron-right"></i></button>
+          </nav>
+        </div>
+        <div class="nl-vista" data-vista="sql">
+          <p class="nl-explicacion"></p>
+          <pre class="nl-sql"><code></code></pre>
+          <button type="button" class="nl-accion" data-accion="copiar"><i class="bi bi-clipboard" aria-hidden="true"></i> Copiar SQL</button>
+        </div>
+      </div>
+    </div>
+  </article>
+</template>

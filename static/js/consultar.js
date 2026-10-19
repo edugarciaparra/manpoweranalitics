@@ -169,7 +169,7 @@
       const r = await fetch(form.dataset.url, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-CSRFToken": csrf },
-        body: JSON.stringify({ pregunta, historial }),
+        body: JSON.stringify({ pregunta, historial, modulo: form.dataset.modulo || "" }),
       });
       const datos = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(datos.error || "No se pudo responder. Probá de nuevo.");

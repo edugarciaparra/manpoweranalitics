@@ -132,8 +132,17 @@ def _mensajes(pregunta, historial):
     return mensajes
 
 
-def _generar_y_ejecutar(proveedor, pregunta, historial):
-    sistema = _sistema_sql()
+def _enfoque(modulo):
+    """Texto que orienta la consulta hacia las tablas del módulo desde el que se pregunta."""
+    if not modulo:
+        return ""
+    return (f"\n\nLa pregunta se hace desde el módulo «{modulo['titulo']}» ({modulo['descripcion']}). "
+            f"Tablas principales del módulo: {', '.join(modulo.get('tablas', []))}. "
+            "Usá otras tablas permitidas si la pregunta lo necesita.")
+
+
+def _generar_y_ejecutar(proveedor, pregunta, historial, modulo=None):
+    sistema = _sistema_sql() + _enfoque(modulo)
     mensajes = _mensajes(pregunta, historial)
     ultimo_error = None
     for intento in range(2):
@@ -169,7 +178,7 @@ def _redactar(proveedor, pregunta, plan, columnas, filas, recortado):
     return proveedor.completar(_SISTEMA_RESPUESTA, [{"role": "user", "content": contenido}], max_tokens=700)
 
 
-def responder_pregunta(pregunta, historial=None):
+def responder_pregunta(pregunta, historial=None, modulo=None):
     """Devuelve un dict listo para mandar en JSON a la pantalla."""
     inicio = time.monotonic()
     if not sgo_configurada():
@@ -177,7 +186,7 @@ def responder_pregunta(pregunta, historial=None):
                                "y reiniciá el servidor.")
     proveedor = get_proveedor()
 
-    plan, datos = _generar_y_ejecutar(proveedor, pregunta, historial)
+    plan, datos = _generar_y_ejecutar(proveedor, pregunta, historial, modulo)
     if plan.get("aclaracion"):
         return {"tipo": "aclaracion", "respuesta": plan["aclaracion"]}
 

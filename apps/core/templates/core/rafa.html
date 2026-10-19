@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block titulo %}Preguntale a Rafa · {{ modulo.titulo }}{% endblock %}
+
+{% block contenido %}
+<div class="container-xl pagina-modulo rafa" style="--c: {{ modulo.color }}">
+  <div class="row g-4">
+    <div class="col-lg-3">{% include "partials/menu_analisis.html" %}</div>
+
+    <div class="col-lg-9">
+      <a class="volver" href="{{ modulo.url }}"><i class="bi bi-arrow-left" aria-hidden="true"></i> {{ modulo.titulo }}</a>
+      <header class="rafa-cabecera">
+        <span class="rafa-avatar" aria-hidden="true">R</span>
+        <div>
+          <h1>Preguntale a Rafa</h1>
+          <p class="sub">Preguntá lo que quieras sobre {{ modulo.titulo|lower }}. Rafa arma la consulta, el portal la ejecuta
+            sobre la base y Rafa analiza el resultado.</p>
+        </div>
+      </header>
+      <div class="nl-estado mb-3">
+        {% if not ia_configurada %}
+        <span class="nl-chip nl-chip-aviso"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Rafa sin configurar: completá IA_PROVEEDOR e IA_API_KEY en el .env</span>
+        {% endif %}
+        <span class="nl-chip"><i class="bi bi-shield-lock" aria-hidden="true"></i> Solo lectura · sin datos personales</span>
+      </div>
+      {% include "ia/_chat.html" %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+<script src="{% static 'js/consultar.js' %}"></script>
+{% endblock %}

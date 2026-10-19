@@ -1,6 +1,6 @@
 {# Menú lateral del módulo: lista de análisis #}
 <aside class="menu-lateral" style="--c: {{ modulo.color }}">
-  <a class="menu-modulo{% if not item %} activo{% endif %}" href="{{ modulo.url }}">
+  <a class="menu-modulo{% if not item and not en_rafa %} activo{% endif %}" href="{{ modulo.url }}">
     <span class="modulo-icono"><i class="bi {{ modulo.icono }}" aria-hidden="true"></i></span>
     <span>{{ modulo.titulo }}</span>
   </a>
@@ -8,12 +8,19 @@
   <button class="btn-menu d-lg-none" type="button" data-bs-toggle="collapse" data-bs-target="#menu-analisis"
           aria-expanded="false" aria-controls="menu-analisis">
     <i class="bi bi-list" aria-hidden="true"></i>
-    {% if item %}{{ item.titulo }}{% else %}Elegir un análisis{% endif %}
+    {% if item %}{{ item.titulo }}{% elif en_rafa %}Preguntale a Rafa{% else %}Elegir un análisis{% endif %}
     <i class="bi bi-chevron-down ms-auto" aria-hidden="true"></i>
   </button>
 
   <nav class="collapse d-lg-block" id="menu-analisis" aria-label="Análisis de {{ modulo.titulo }}">
     <ul class="menu-lista">
+      <li>
+        <a href="{% url 'core:rafa' modulo.slug %}" class="menu-rafa{% if en_rafa %} activo{% endif %}"
+           {% if en_rafa %}aria-current="page"{% endif %}>
+          <i class="bi bi-chat-dots" aria-hidden="true"></i>Preguntale a Rafa
+        </a>
+      </li>
+      <li class="menu-separador" aria-hidden="true"></li>
       {% for a in analisis %}
       <li>
         <a href="{% url 'core:analisis' modulo.slug a.slug %}"

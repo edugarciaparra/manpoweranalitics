@@ -8,7 +8,7 @@ from django.views.decorators.http import require_POST
 
 from apps.core.db import sgo_configurada
 
-from apps.core.registry import obtener_catalogo
+from apps.core.registry import obtener_catalogo, obtener_modulo
 from apps.core.utils import PERIODO_DEFECTO
 
 from .consulta import ErrorConsulta, responder_pregunta
@@ -65,9 +65,10 @@ def consultar(request):
     if not pregunta:
         return JsonResponse({"error": "Escribí una pregunta."}, status=400)
     historial = cuerpo.get("historial") if isinstance(cuerpo.get("historial"), list) else []
+    modulo = obtener_modulo(str(cuerpo.get("modulo") or "")) if cuerpo.get("modulo") else None
 
     try:
-        resultado = responder_pregunta(pregunta, historial)
+        resultado = responder_pregunta(pregunta, historial, modulo)
     except ErrorConsulta as e:
         _registrar(request, pregunta, error=str(e), proveedor=settings.IA_PROVEEDOR)
         return JsonResponse({"error": str(e)}, status=422)

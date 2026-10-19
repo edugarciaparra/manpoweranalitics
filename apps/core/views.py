@@ -51,6 +51,16 @@ def modulo(request, modulo):
     return render(request, "core/modulo.html", {"modulo": mod, "analisis": list(catalogo)})
 
 
+def rafa(request, modulo):
+    """Preguntale a Rafa: preguntas libres sobre el módulo, con sugerencias propias."""
+    mod, catalogo = _modulo_y_catalogo(modulo)
+    return render(request, "core/rafa.html", {
+        "modulo": mod, "analisis": list(catalogo), "en_rafa": True,
+        "modulo_rafa": mod["slug"], "sugerencias": mod.get("preguntas", []),
+        "titulo_sugerencias": "Preguntas sugeridas", "pregunta_inicial": request.GET.get("q", "")[:500],
+    })
+
+
 def analisis(request, modulo, analisis):
     mod, catalogo = _modulo_y_catalogo(modulo)
     item = catalogo.obtener(analisis)
