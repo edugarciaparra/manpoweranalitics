@@ -37,7 +37,7 @@
           {% endfor %}
           <li class="nav-item ms-lg-2">
             <a class="nav-link nav-ia{% if '/ia/' in request.path %} active{% endif %}" href="{% url 'ia:consultar' %}">
-              <i class="bi bi-stars me-1" aria-hidden="true"></i>Preguntale a la base
+              <i class="bi bi-chat-dots me-1" aria-hidden="true"></i>Preguntale a Rafa
             </a>
           </li>
         </ul>
@@ -63,7 +63,7 @@
   <footer class="pie">
     <div class="container-xl">Manpower Uruguay ·
       {% if base_conectada %}<i class="bi bi-database-check" aria-hidden="true"></i> Datos de {{ base_nombre }}{% else %}Base sin conectar{% endif %}
-      {% if not ia_configurada %} · Asistente sin configurar{% endif %}</div>
+      {% if not ia_configurada %} · Rafa sin configurar{% endif %}</div>
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

@@ -225,7 +225,7 @@
 
   async function preguntar(pregunta) {
     agregar("msg-yo", pregunta);
-    const espera = agregar("msg-ia msg-cargando", "Analizando…");
+    const espera = agregar("msg-ia msg-cargando", "Rafa está analizando…");
     boton.disabled = true;
     try {
       const r = await fetch(form.dataset.url, {
@@ -241,7 +241,7 @@
       });
       const datos = await r.json();
       espera.remove();
-      if (!r.ok) agregar("msg-error", datos.error || "El asistente no respondió. Probá de nuevo.");
+      if (!r.ok) agregar("msg-error", datos.error || "Rafa no respondió. Probá de nuevo.");
       else agregar("msg-ia", datos.respuesta);
     } catch (e) {
       espera.remove();

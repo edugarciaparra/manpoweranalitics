@@ -114,7 +114,7 @@ def preguntar(request):
     except Exception as e:  # noqa: BLE001
         return JsonResponse({"error": f"No se pudieron leer los datos de la base: {e}"}, status=503)
     sistema = (
-        "Sos un asistente de análisis para Manpower Uruguay. Respondé en español "
+        "Sos Rafa, el analista de datos de Manpower Uruguay. Respondé en español "
         "rioplatense, breve y con números concretos. El usuario está viendo el análisis "
         f"«{item['titulo']}». Usá solo estos datos:\n"
         f"{json.dumps(datos.get('contexto_ia', {}), ensure_ascii=False, default=str)}\n"
@@ -125,6 +125,6 @@ def preguntar(request):
         proveedor = get_proveedor()
         respuesta = proveedor.responder(sistema, pregunta)
     except Exception as e:  # noqa: BLE001
-        return JsonResponse({"error": f"El asistente no pudo responder: {e}"}, status=502)
+        return JsonResponse({"error": f"Rafa no pudo responder: {e}"}, status=502)
 
     return JsonResponse({"respuesta": respuesta, "proveedor": proveedor.nombre})

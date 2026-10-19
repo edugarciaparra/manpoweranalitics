@@ -784,3 +784,6 @@ body { background: var(--papel); color: var(--tinta); }
 .menu-lista a.menu-rafa.activo { color: #fff; }
 .rafa .nl-chip { background: #fff; color: var(--tinta-suave, #5B6577); border: 1px solid var(--linea, #E7EAF0); }
 .rafa .nl-chip-aviso { background: #FFF4D6; color: #6B4A00; border-color: #F2D58A; }
+.nl-icono-rafa { background: var(--c, #0B5CAB); color: #fff; font-weight: 800; font-style: normal; }
+.rafa-avatar-chico { display: inline-grid; width: 28px; height: 28px; font-size: .85rem; margin-right: .45rem; vertical-align: middle; box-shadow: none; }
+.offcanvas-title { display: flex; align-items: center; }

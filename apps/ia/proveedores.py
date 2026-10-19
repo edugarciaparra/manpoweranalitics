@@ -143,7 +143,7 @@ PROVEEDORES = {p.nombre: p for p in
 def get_proveedor() -> ProveedorIA:
     nombre = (settings.IA_PROVEEDOR or "").strip().lower()
     if not nombre:
-        raise ErrorIA("El asistente no está configurado: completá IA_PROVEEDOR e IA_API_KEY en el archivo .env "
+        raise ErrorIA("Rafa no está configurado: completá IA_PROVEEDOR e IA_API_KEY en el archivo .env "
                       "y reiniciá el servidor.")
     clase = PROVEEDORES.get(ALIAS.get(nombre, nombre))
     if clase is None:

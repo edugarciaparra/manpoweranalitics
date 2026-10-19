@@ -28,7 +28,7 @@
           {% endif %}
           <button class="btn-asistente" type="button" data-bs-toggle="offcanvas" data-bs-target="#asistente"
                   aria-controls="asistente">
-            <i class="bi bi-stars" aria-hidden="true"></i> Preguntale a los datos
+            <i class="bi bi-chat-dots" aria-hidden="true"></i> Preguntale a Rafa
           </button>
         </div>
       </header>
@@ -174,12 +174,12 @@
   </div>
 </div>
 
-{# Asistente: panel lateral que se abre desde la cabecera #}
+{# Rafa: panel lateral que se abre desde la cabecera #}
 <div class="offcanvas offcanvas-end asistente" tabindex="-1" id="asistente" aria-labelledby="asistente-titulo"
      style="--c: {{ modulo.color }}">
   <div class="offcanvas-header">
     <div>
-      <h2 class="offcanvas-title" id="asistente-titulo"><i class="bi bi-stars me-1" aria-hidden="true"></i>Preguntale a los datos</h2>
+      <h2 class="offcanvas-title" id="asistente-titulo"><span class="rafa-avatar rafa-avatar-chico" aria-hidden="true">R</span>Preguntale a Rafa</h2>
       <p class="asistente-ayuda">Responde sobre «{{ item.titulo }}»{% if item.usa_periodo %} con el período elegido{% endif %}.</p>
     </div>
     <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>

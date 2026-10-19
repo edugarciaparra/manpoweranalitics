@@ -1,18 +1,18 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block titulo %}Preguntale a la base{% endblock %}
+{% block titulo %}Preguntale a Rafa{% endblock %}
 
 {% block contenido %}
 <section class="nl-portada">
   <div class="container-xl">
-    <span class="nl-etiqueta"><i class="bi bi-stars" aria-hidden="true"></i> Consultas en lenguaje natural</span>
-    <h1 class="nl-titulo">Preguntale a la base de Manpower</h1>
-    <p class="nl-sub">Escribí la pregunta como se la harías a un analista. Se arma la consulta, se ejecuta sobre sgo_new
-      y te devuelve la respuesta con su gráfico y los datos.</p>
+    <span class="nl-etiqueta"><i class="bi bi-chat-dots" aria-hidden="true"></i> Consultas en lenguaje natural sobre toda la base</span>
+    <h1 class="nl-titulo">Preguntale a Rafa</h1>
+    <p class="nl-sub">Escribí la pregunta como se la harías a un analista. Rafa arma la consulta, el portal la ejecuta
+      sobre la base y Rafa analiza el resultado, con su gráfico y los datos.</p>
     <div class="nl-estado">
       {% if not ia_configurada %}
-      <span class="nl-chip nl-chip-aviso"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Asistente sin configurar: completá IA_PROVEEDOR e IA_API_KEY en el .env</span>
+      <span class="nl-chip nl-chip-aviso"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Rafa sin configurar: completá IA_PROVEEDOR e IA_API_KEY en el .env</span>
       {% endif %}
       {% if base_conectada %}
       <span class="nl-chip nl-chip-ok"><i class="bi bi-database-check" aria-hidden="true"></i> Base conectada</span>

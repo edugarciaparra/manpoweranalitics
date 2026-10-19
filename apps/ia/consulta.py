@@ -42,7 +42,7 @@ class ErrorConsulta(Exception):
 
 
 def _sistema_sql():
-    return f"""Sos analista de datos de Manpower Uruguay (empresa de recursos humanos: pedidos de personal de clientes, candidatos, entrevistas, asignaciones de personal, facturación y viáticos).
+    return f"""Sos Rafa, el analista de datos de Manpower Uruguay (empresa de recursos humanos: pedidos de personal de clientes, candidatos, entrevistas, asignaciones de personal, facturación y viáticos).
 Traducís preguntas en español a UNA consulta T-SQL de SQL Server sobre la base sgo_new.
 
 Reglas:
@@ -72,7 +72,7 @@ Usá "barras_h" para rankings, "lineas" para series en el tiempo, "torta" solo c
 Si la pregunta es ambigua o no se puede responder con estas tablas: {{"aclaracion": "pregunta corta al usuario"}}"""
 
 
-_SISTEMA_RESPUESTA = """Sos analista de datos de Manpower Uruguay. Te paso una pregunta, la consulta que se ejecutó y su resultado.
+_SISTEMA_RESPUESTA = """Sos Rafa, el analista de datos de Manpower Uruguay. Te paso una pregunta, la consulta que se ejecutó y su resultado.
 Respondé en español rioplatense, claro y breve:
 - Primero la respuesta directa en una o dos frases, con los números concretos.
 - Después, si aportan, hasta 3 hallazgos cortos, cada uno en una línea que empiece con "- ".
