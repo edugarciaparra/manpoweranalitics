@@ -113,10 +113,11 @@ def _registrar(request, pregunta, modulo, conversacion, resultado=None, error=""
 def _historial_sql(request, conversacion):
     """Preguntas anteriores de la conversación con su SQL, para entender las repreguntas («¿y por división?»)."""
     try:
-        previas = ConsultaIA.objects.filter(sesion=_sesion(request), conversacion=conversacion, tipo="resultado")[:4]
-    except Exception:  # noqa: BLE001
+        previas = list(ConsultaIA.objects.filter(sesion=_sesion(request), conversacion=conversacion, tipo="resultado")[:4])
+    except Exception:  # noqa: BLE001  (falta python manage.py migrate)
+        log.warning("No se pudo leer la conversación de Rafa", exc_info=True)
         return []
-    return [{"pregunta": c.pregunta, "sql": c.sql} for c in reversed(list(previas))]
+    return [{"pregunta": c.pregunta, "sql": c.sql} for c in reversed(previas)]
 
 
 @require_POST
@@ -167,6 +168,8 @@ def consulta_guardada(request, id_consulta):
         c = ConsultaIA.objects.get(id=id_consulta, sesion=_sesion(request))
     except ConsultaIA.DoesNotExist:
         return JsonResponse({"error": "No se encontró esa pregunta."}, status=404)
+    except Exception:  # noqa: BLE001  (falta python manage.py migrate)
+        return JsonResponse({"error": "Falta actualizar la base del portal: corré python manage.py migrate."}, status=503)
     return JsonResponse(_para_pantalla(c))
 
 
