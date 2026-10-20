@@ -27,7 +27,7 @@ from apps.core.db import ALIAS, BaseNoDisponible, sgo_configurada
 
 from .conocimiento import CODIGOS, RELACIONES
 from .esquema import texto_esquema
-from .graficos import armar_grafico
+from .graficos import armar_graficos
 from .proveedores import get_proveedor
 from .sql_seguro import ConsultaNoPermitida, validar
 
@@ -68,7 +68,7 @@ Códigos y criterios:
 Respondé SOLO con un JSON, sin texto antes ni después:
 {{"sql": "...", "titulo": "título corto del resultado", "explicacion": "qué calcula, en una frase",
   "grafico": {{"tipo": "barras" | "barras_h" | "lineas" | "torta" | "ninguno", "x": "columna de categorías o fechas", "y": ["columnas numéricas"]}}}}
-Usá "barras_h" para rankings, "lineas" para series en el tiempo, "torta" solo con 6 categorías o menos que suman un total, "ninguno" para un único número o listados.
+Siempre que el resultado tenga varias filas, armalo para que se pueda graficar (una columna de categorías o fechas y al menos una numérica). Usá "barras_h" para rankings, "lineas" para series en el tiempo, "torta" solo con 6 categorías o menos que suman un total, "ninguno" solo para un único número.
 Si la pregunta es ambigua o no se puede responder con estas tablas: {{"aclaracion": "pregunta corta al usuario"}}"""
 
 
@@ -198,6 +198,6 @@ def responder_pregunta(pregunta, historial=None, modulo=None):
     return {
         **base, "tipo": "resultado", "respuesta": respuesta,
         "columnas": columnas, "filas": filas, "recortado": recortado,
-        "grafico": armar_grafico(plan.get("grafico"), columnas, filas),
+        "graficos": armar_graficos(plan.get("grafico"), columnas, filas),
         "segundos": round(time.monotonic() - inicio, 1),
     }

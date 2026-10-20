@@ -1,30 +1,62 @@
-{# Conversación con el asistente: sugerencias, respuestas (gráfico, datos, SQL) y caja de pregunta #}
-<div class="nl-cuerpo">
-  <div class="nl-sugerencias" id="nl-sugerencias">
-    <h2 class="nl-sugerencias-titulo">{{ titulo_sugerencias|default:"Probá con" }}</h2>
-    <div class="nl-sugerencias-lista">
-      {% for s in sugerencias %}
-      <button type="button" class="nl-sugerencia" data-pregunta="{{ s }}"><i class="bi bi-arrow-return-right" aria-hidden="true"></i>{{ s }}</button>
-      {% endfor %}
+{# Conversación con Rafa: a la izquierda sugerencias y preguntas anteriores, a la derecha las respuestas #}
+<div class="rafa-chat" id="rafa-chat"
+     data-url="{% url 'ia:consultar_api' %}" data-url-nueva="{% url 'ia:nueva' %}"
+     data-url-consulta="{% url 'ia:consulta' 0 %}" data-modulo="{{ modulo_rafa|default:'' }}"
+     data-inicial="{{ pregunta_inicial }}">
+  {% csrf_token %}
+
+  <aside class="rafa-lado" aria-label="Preguntas">
+    <button type="button" class="rafa-nueva" id="nl-nueva">
+      <i class="bi bi-plus-lg" aria-hidden="true"></i> Nueva conversación
+    </button>
+
+    <section class="rafa-bloque">
+      <h2 class="rafa-bloque-titulo"><i class="bi bi-lightbulb" aria-hidden="true"></i> Preguntas sugeridas</h2>
+      <ul class="rafa-lista">
+        {% for s in sugerencias %}
+        <li><button type="button" class="rafa-item nl-sugerencia" data-pregunta="{{ s }}">{{ s }}</button></li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="rafa-bloque">
+      <h2 class="rafa-bloque-titulo"><i class="bi bi-clock-history" aria-hidden="true"></i> Tus preguntas</h2>
+      <ul class="rafa-lista" id="nl-historial">
+        {% for h in historial %}
+        <li><button type="button" class="rafa-item rafa-hist{% if h.actual %} actual{% endif %}{% if h.error %} con-error{% endif %}"
+                    data-id="{{ h.id }}" data-pregunta="{{ h.pregunta }}">
+          <span class="rafa-hist-texto">{{ h.pregunta }}</span><span class="rafa-hist-fecha">{{ h.fecha }}</span>
+        </button></li>
+        {% endfor %}
+      </ul>
+      <p class="rafa-vacio" id="nl-historial-vacio"{% if historial %} hidden{% endif %}>Todavía no hiciste preguntas.</p>
+    </section>
+  </aside>
+
+  <div class="rafa-principal">
+    <div class="rafa-bienvenida" id="nl-bienvenida"{% if turnos %} hidden{% endif %}>
+      <span class="rafa-avatar" aria-hidden="true">R</span>
+      <div>
+        <strong>Hola, soy Rafa.</strong>
+        <p>Preguntame lo que quieras en tus palabras o elegí una pregunta sugerida. Armo la consulta, se ejecuta sobre la base
+          y te explico el resultado con un gráfico y los datos.</p>
+      </div>
     </div>
+
+    <div class="nl-conversacion" id="nl-conversacion" aria-live="polite"></div>
+
+    <form class="nl-compositor" id="nl-form">
+      <label for="nl-pregunta" class="visually-hidden">Tu pregunta</label>
+      <textarea id="nl-pregunta" rows="1" maxlength="1000"
+                placeholder="Preguntale a Rafa… Ej.: ¿qué clientes pidieron más personal este año?" required></textarea>
+      <button type="submit" class="nl-enviar" id="nl-enviar">
+        <i class="bi bi-arrow-up" aria-hidden="true"></i><span class="visually-hidden">Preguntar</span>
+      </button>
+    </form>
+    <p class="nl-ayuda">Podés repreguntar sobre la respuesta anterior: «¿y por división?», «solo los activos».</p>
   </div>
-
-  <div class="nl-conversacion" id="nl-conversacion" aria-live="polite"></div>
-
-  <form class="nl-compositor" id="nl-form" data-url="{% url 'ia:consultar_api' %}" data-inicial="{{ pregunta_inicial }}" data-modulo="{{ modulo_rafa|default:'' }}">
-    {% csrf_token %}
-    <label for="nl-pregunta" class="visually-hidden">Tu pregunta</label>
-    <textarea id="nl-pregunta" rows="1" maxlength="1000"
-              placeholder="Ej.: ¿qué clientes pidieron más personal este año?" required></textarea>
-    <button type="button" class="nl-nueva" id="nl-nueva" title="Empezar de nuevo (olvida las preguntas anteriores)">
-      <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i><span class="visually-hidden">Empezar de nuevo</span>
-    </button>
-    <button type="submit" class="nl-enviar" id="nl-enviar">
-      <i class="bi bi-send-fill" aria-hidden="true"></i><span class="d-none d-sm-inline">Preguntar</span>
-    </button>
-  </form>
-  <p class="nl-ayuda">Podés seguir preguntando sobre la respuesta anterior: «¿y por división?», «solo los activos».</p>
 </div>
+{{ turnos|json_script:"nl-turnos" }}
 
 <template id="nl-plantilla">
   <article class="nl-turno">
@@ -42,7 +74,7 @@
         <nav class="nl-pestanas" role="tablist">
           <button type="button" role="tab" data-vista="grafico"><i class="bi bi-bar-chart-line" aria-hidden="true"></i> Gráfico</button>
           <button type="button" role="tab" data-vista="tabla"><i class="bi bi-table" aria-hidden="true"></i> Datos</button>
-          <button type="button" role="tab" data-vista="sql"><i class="bi bi-code-slash" aria-hidden="true"></i> Consulta SQL</button>
+          <span class="nl-tipos" role="group" aria-label="Tipo de gráfico"></span>
           <span class="nl-pestanas-acciones">
             <button type="button" class="nl-accion" data-accion="exportar"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</button>
           </span>
@@ -62,11 +94,6 @@
             <span class="nl-pagina"></span>
             <button type="button" class="btn-icono" data-paso="1" aria-label="Página siguiente"><i class="bi bi-chevron-right"></i></button>
           </nav>
-        </div>
-        <div class="nl-vista" data-vista="sql">
-          <p class="nl-explicacion"></p>
-          <pre class="nl-sql"><code></code></pre>
-          <button type="button" class="nl-accion" data-accion="copiar"><i class="bi bi-clipboard" aria-hidden="true"></i> Copiar SQL</button>
         </div>
       </div>
     </div>

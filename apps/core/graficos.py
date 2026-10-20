@@ -35,7 +35,7 @@ def base(**extra):
     opcion = {
         "color": SERIES,
         "animationDuration": 500,
-        "textStyle": {"fontFamily": "Plus Jakarta Sans, system-ui, sans-serif", "color": TINTA_SUAVE},
+        "textStyle": {"fontFamily": "Inter, system-ui, sans-serif", "fontSize": 11, "color": TINTA_SUAVE},
         "tooltip": {"trigger": "axis", "confine": True},
         "grid": {"left": 8, "right": 16, "top": 36, "bottom": 8, "containLabel": True},
     }

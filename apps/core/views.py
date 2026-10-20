@@ -56,11 +56,11 @@ def modulo(request, modulo):
 
 def rafa(request, modulo):
     """Preguntale a Rafa: preguntas libres sobre el módulo, con sugerencias propias."""
+    from apps.ia.views import contexto_chat
+
     mod, catalogo = _modulo_y_catalogo(modulo)
     return render(request, "core/rafa.html", {
-        "modulo": mod, "analisis": list(catalogo), "en_rafa": True,
-        "modulo_rafa": mod["slug"], "sugerencias": mod.get("preguntas", []),
-        "titulo_sugerencias": "Preguntas sugeridas", "pregunta_inicial": request.GET.get("q", "")[:500],
+        "modulo": mod, "analisis": list(catalogo), "en_rafa": True, **contexto_chat(request, mod),
     })
 
 

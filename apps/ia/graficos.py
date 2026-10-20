@@ -95,3 +95,37 @@ def armar_grafico(sugerencia, columnas, filas):
         yAxis=g.eje_valores(),
         series=[g.barras(columnas[i], [f[i] for f in filas]) for i in ys],
     )
+
+
+NOMBRES_TIPO = {"barras": "Columnas", "barras_h": "Barras", "lineas": "Líneas", "torta": "Torta"}
+
+
+def _tipo_de(opcion):
+    serie = (opcion.get("series") or [{}])[0]
+    if serie.get("type") == "pie":
+        return "torta"
+    if serie.get("type") == "line":
+        return "lineas"
+    eje_y = opcion.get("yAxis") or {}
+    return "barras_h" if isinstance(eje_y, dict) and eje_y.get("type") == "category" else "barras"
+
+
+def armar_graficos(sugerencia, columnas, filas):
+    """El gráfico sugerido y las otras formas posibles de los mismos datos, para poder cambiarlo en pantalla.
+
+    {"principal": "barras_h", "opciones": {"barras_h": {...}, "barras": {...}, "lineas": {...}}} o None.
+    """
+    principal = armar_grafico(sugerencia, columnas, filas)
+    if principal is None:
+        return None
+    tipo_principal = _tipo_de(principal)
+    opciones = {tipo_principal: principal}
+    base = dict(sugerencia or {})
+    for tipo in NOMBRES_TIPO:
+        if tipo in opciones:
+            continue
+        opcion = armar_grafico({**base, "tipo": tipo}, columnas, filas)
+        if opcion is not None and _tipo_de(opcion) == tipo:
+            opciones[tipo] = opcion
+    return {"principal": tipo_principal, "opciones": opciones,
+            "nombres": {t: NOMBRES_TIPO[t] for t in opciones}}

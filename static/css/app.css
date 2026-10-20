@@ -10,7 +10,7 @@
   --alerta: #C2341A;
   --c: var(--marca);       /* color del módulo, lo redefine cada módulo */
 
-  --bs-body-font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+  --bs-body-font-family: "Inter", system-ui, sans-serif;
   --bs-body-color: var(--tinta);
   --bs-body-bg: var(--papel);
   --bs-link-color-rgb: 47, 111, 222;
@@ -836,4 +836,99 @@ body { background: var(--papel); color: var(--tinta); }
   .grilla-secciones { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 1.75rem; }
   .grilla-secciones .seccion-ancha { grid-column: 1 / -1; }
   .panel-tabla { max-height: 640px; overflow-y: auto; }
+}
+
+/* =====================================================================
+   Rediseño: letra más chica en todo el portal y estilo más liviano
+   ===================================================================== */
+html { font-size: 14px; }
+body { letter-spacing: -.005em; background: #F5F7FB; }
+:root { --papel: #F5F7FB; --linea: #E4E9F1; --sombra: 0 1px 2px rgba(15, 31, 58, .05), 0 2px 8px rgba(15, 31, 58, .04); }
+
+/* Barra superior más fina */
+.barra { padding: .35rem 0; }
+.barra .nav-link { font-size: .92rem; padding: .4rem .65rem; border-radius: .5rem; }
+.marca { font-size: 1.05rem; }
+
+/* Títulos */
+.cabecera h1, .rafa-cabecera h1 { font-size: 1.65rem; font-weight: 700; letter-spacing: -.025em; }
+.cabecera { margin-bottom: 1rem; }
+.sub { font-size: .95rem; }
+.seccion-cabeza h2 { font-size: 1.08rem; font-weight: 700; letter-spacing: -.01em; }
+.seccion-cabeza h2::before { width: 4px; height: 1rem; }
+.seccion { margin-bottom: 1.75rem; }
+
+/* Tarjetas: borde fino y sombra suave */
+.panel, .kpi, .tarjeta-analisis, .barra-modulo, .rafa-teaser, .nl-tarjeta, .rafa-lado, .tarjeta-modulo {
+  border: 1px solid var(--linea) !important; box-shadow: var(--sombra) !important; border-radius: 12px !important;
+}
+.panel { padding: 1.1rem 1.2rem; }
+.kpi { border-left: 1px solid var(--linea) !important; position: relative; padding: .9rem 1rem; }
+.kpi::before { content: ""; position: absolute; left: 0; top: .9rem; bottom: .9rem; width: 3px; border-radius: 0 3px 3px 0; background: var(--mp-azul); }
+.kpi-alerta::before { background: var(--mp-rojo); }
+.kpi-label { font-size: .8rem; }
+.kpi-valor { font-size: 1.55rem; font-weight: 700; letter-spacing: -.02em; }
+.explicacion { font-size: .88rem; border-radius: 10px; }
+.lectura { font-size: .92rem; }
+.tabla { font-size: .88rem; }
+.tabla thead th { font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; }
+.tarjeta-analisis { padding: .9rem 1rem; }
+.tarjeta-analisis strong { font-size: .98rem; }
+.tarjeta-analisis span { font-size: .88rem; }
+
+/* ---------- Preguntale a Rafa: menú de preguntas al costado y respuestas al lado ---------- */
+.pagina-rafa { padding-top: 1.25rem; padding-bottom: 2rem; }
+.pagina-rafa .rafa-cabecera { flex-wrap: wrap; }
+.pagina-rafa .rafa-cabecera .nl-estado { margin: 0 0 0 auto; }
+.pagina-rafa .nl-chip { background: #fff; color: var(--tinta-suave); border: 1px solid var(--linea); font-size: .8rem; }
+.pagina-rafa .nl-chip-aviso { background: #FFF4D6; color: #6B4A00; border-color: #F2D58A; }
+.rafa-chat { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+.rafa-lado { position: sticky; top: 4.5rem; background: #fff; padding: .9rem; max-height: calc(100vh - 6rem);
+  overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; }
+.rafa-nueva { display: flex; align-items: center; justify-content: center; gap: .4rem; width: 100%;
+  border: 1px solid var(--linea); background: #F7F9FC; color: var(--tinta); font-weight: 600; font-size: .9rem;
+  border-radius: 10px; padding: .55rem .8rem; }
+.rafa-nueva:hover { border-color: var(--c, var(--mp-azul)); color: var(--c, var(--mp-azul)); }
+.rafa-bloque-titulo { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--tinta-suave);
+  font-weight: 700; margin: 0 0 .45rem .2rem; display: flex; align-items: center; gap: .35rem; }
+.rafa-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: .15rem; }
+.rafa-item { width: 100%; text-align: left; border: 0; background: transparent; border-radius: 8px; padding: .45rem .55rem;
+  font-size: .86rem; line-height: 1.35; color: var(--tinta); display: flex; flex-direction: column; gap: .1rem; }
+.rafa-item:hover { background: var(--mp-celeste); color: var(--mp-azul-osc); }
+.nl-sugerencia::before { content: "→ "; color: var(--mp-rojo); font-weight: 600; }
+.nl-sugerencia { display: block; }
+.rafa-hist.actual { background: #F2F6FC; }
+.rafa-hist.actual .rafa-hist-texto::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--c, var(--mp-azul)); margin-right: .4rem; vertical-align: middle; }
+.rafa-hist.con-error .rafa-hist-texto { color: var(--tinta-suave); }
+.rafa-hist-texto { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.rafa-hist-fecha { font-size: .72rem; color: var(--tinta-suave); }
+.rafa-vacio { font-size: .84rem; color: var(--tinta-suave); margin: 0 .2rem; }
+.rafa-principal { min-width: 0; display: flex; flex-direction: column; min-height: calc(100vh - 13rem); }
+.rafa-bienvenida { display: flex; gap: .9rem; align-items: flex-start; background: #fff; border: 1px solid var(--linea);
+  border-radius: 12px; padding: 1.1rem 1.2rem; box-shadow: var(--sombra); margin-bottom: 1rem; }
+.rafa-bienvenida .rafa-avatar { width: 40px; height: 40px; font-size: 1rem; }
+.rafa-bienvenida p { margin: .2rem 0 0; color: var(--tinta-suave); font-size: .92rem; }
+.pagina-rafa .nl-conversacion { gap: 1rem; flex: 1; }
+.pagina-rafa .nl-yo { font-size: .92rem; }
+.pagina-rafa .nl-tarjeta { border-top: 0 !important; }
+.pagina-rafa .nl-tarjeta-cabeza { padding: .85rem 1rem .2rem; }
+.pagina-rafa .nl-icono { width: 30px; height: 30px; font-size: .8rem; }
+.pagina-rafa .nl-tarjeta-titulo { font-size: 1rem; font-weight: 700; }
+.pagina-rafa .nl-respuesta { padding: .35rem 1rem .9rem 3.4rem; font-size: .92rem; }
+.pagina-rafa .nl-vista { padding: .8rem 1rem 1rem; }
+.nl-turno.resaltado .nl-tarjeta { box-shadow: 0 0 0 2px var(--c, var(--mp-azul)) !important; }
+.nl-turno.anterior .nl-yo::after { content: " · pregunta anterior"; opacity: .75; font-size: .8em; }
+.nl-tipos { display: inline-flex; gap: .2rem; margin-left: .5rem; padding-bottom: .35rem; }
+.nl-tipos button { border: 1px solid var(--linea); background: #fff; color: var(--tinta-suave); font-size: .78rem;
+  border-radius: 999px; padding: .15rem .6rem; }
+.nl-tipos button.activo { background: var(--c, var(--mp-azul)); border-color: var(--c, var(--mp-azul)); color: #fff; }
+.pagina-rafa .nl-compositor { position: sticky; bottom: 1rem; margin-top: 1rem; border-radius: 14px; padding: .4rem .4rem .4rem .9rem; }
+.pagina-rafa .nl-compositor textarea { font-size: .95rem; }
+.pagina-rafa .nl-enviar { width: 40px; height: 40px; padding: 0; border-radius: 10px; display: grid; place-items: center; }
+.pagina-rafa .nl-ayuda { margin-top: .6rem; font-size: .78rem; }
+@media (max-width: 991.98px) {
+  .rafa-chat { grid-template-columns: 1fr; }
+  .rafa-lado { position: static; max-height: none; }
+  .pagina-rafa .nl-respuesta { padding-left: 1rem; }
 }

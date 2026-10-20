@@ -2,7 +2,7 @@ from django.db import models
 
 
 class ConsultaIA(models.Model):
-    """Registro de cada pregunta en lenguaje natural: qué se preguntó, qué SQL se ejecutó y cómo terminó."""
+    """Cada pregunta a Rafa: qué se preguntó, qué SQL se ejecutó, cómo terminó y la respuesta que se mostró."""
     fecha = models.DateTimeField(auto_now_add=True)
     usuario = models.CharField(max_length=150, blank=True)
     pregunta = models.TextField()
@@ -12,6 +12,11 @@ class ConsultaIA(models.Model):
     segundos = models.FloatField(default=0)
     error = models.TextField(blank=True)
     proveedor = models.CharField(max_length=20, blank=True)
+    # Para conservar las conversaciones: de qué navegador (sesión), desde qué módulo y en qué conversación
+    sesion = models.CharField(max_length=40, blank=True, db_index=True)
+    modulo = models.CharField(max_length=30, blank=True)
+    conversacion = models.CharField(max_length=36, blank=True, db_index=True)
+    resultado = models.TextField(blank=True)  # JSON de la respuesta que se mostró (sin el SQL)
 
     class Meta:
         ordering = ["-fecha"]

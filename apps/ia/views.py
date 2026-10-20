@@ -1,5 +1,6 @@
 import json
 import logging
+import uuid
 
 from django.conf import settings
 from django.http import JsonResponse
@@ -29,33 +30,98 @@ SUGERENCIAS = [
 ]
 
 
-def consultar_pagina(request):
-    """Pantalla para preguntar a la base en lenguaje natural."""
-    return render(request, "ia/consultar.html", {
-        "sugerencias": SUGERENCIAS,
+MAX_FILAS_GUARDADAS = 2000   # filas de cada respuesta que se guardan para volver a mostrarla
+PREGUNTAS_EN_HISTORIAL = 40
+
+
+def _sesion(request):
+    """Clave de la sesión del navegador (se crea si todavía no existe)."""
+    if not request.session.session_key:
+        request.session.save()
+    return request.session.session_key
+
+
+def _clave_conversacion(modulo):
+    return f"rafa_conversacion_{modulo or 'general'}"
+
+
+def _conversacion(request, modulo, nueva=False):
+    clave = _clave_conversacion(modulo)
+    if nueva or not request.session.get(clave):
+        request.session[clave] = uuid.uuid4().hex
+    return request.session[clave]
+
+
+def _para_pantalla(c):
+    """Lo que el navegador necesita para volver a mostrar una pregunta guardada (nunca el SQL)."""
+    try:
+        resultado = json.loads(c.resultado) if c.resultado else {}
+    except json.JSONDecodeError:
+        resultado = {}
+    if c.error and not resultado:
+        resultado = {"tipo": "error", "error": c.error}
+    return {"id": c.id, "pregunta": c.pregunta, "fecha": c.fecha.strftime("%d/%m %H:%M"), **resultado}
+
+
+def contexto_chat(request, modulo=None):
+    """Datos para dibujar la conversación: sugerencias, preguntas anteriores y la conversación en curso."""
+    slug = modulo["slug"] if modulo else ""
+    sesion = _sesion(request)
+    actual = _conversacion(request, slug)
+    try:
+        anteriores = list(ConsultaIA.objects.filter(sesion=sesion, modulo=slug)[:PREGUNTAS_EN_HISTORIAL])
+    except Exception:  # noqa: BLE001  (falta python manage.py migrate)
+        log.warning("No se pudo leer el historial de Rafa", exc_info=True)
+        anteriores = []
+    turnos = [_para_pantalla(c) for c in reversed(anteriores) if c.conversacion == actual]
+    return {
+        "sugerencias": modulo.get("preguntas", []) if modulo else SUGERENCIAS,
+        "historial": [{"id": c.id, "pregunta": c.pregunta, "fecha": c.fecha.strftime("%d/%m %H:%M"),
+                       "actual": c.conversacion == actual, "error": bool(c.error)} for c in anteriores],
+        "turnos": turnos,
+        "modulo_rafa": slug,
         "pregunta_inicial": request.GET.get("q", "")[:500],
         "ia_configurada": bool(settings.IA_PROVEEDOR),
         "base_conectada": sgo_configurada(),
-    })
+    }
 
 
-def _registrar(request, pregunta, resultado=None, error="", proveedor=""):
+def consultar_pagina(request):
+    """Preguntale a Rafa sobre toda la base."""
+    return render(request, "ia/consultar.html", contexto_chat(request))
+
+
+def _registrar(request, pregunta, modulo, conversacion, resultado=None, error=""):
+    resultado = resultado or {}
+    para_guardar = {k: v for k, v in resultado.items() if k != "sql"}
+    if para_guardar.get("filas"):
+        para_guardar["filas"] = para_guardar["filas"][:MAX_FILAS_GUARDADAS]
     try:
-        ConsultaIA.objects.create(
+        return ConsultaIA.objects.create(
             usuario=request.user.get_username() if request.user.is_authenticated else "",
-            pregunta=pregunta, error=error, proveedor=proveedor,
-            sql=(resultado or {}).get("sql", ""),
-            tipo=(resultado or {}).get("tipo", "error"),
-            filas=len((resultado or {}).get("filas") or []),
-            segundos=(resultado or {}).get("segundos", 0),
+            pregunta=pregunta, error=error, proveedor=settings.IA_PROVEEDOR,
+            sql=resultado.get("sql", ""), tipo=resultado.get("tipo", "error"),
+            filas=len(resultado.get("filas") or []), segundos=resultado.get("segundos", 0),
+            sesion=_sesion(request), modulo=modulo, conversacion=conversacion,
+            resultado=json.dumps(para_guardar, ensure_ascii=False, default=str) if para_guardar else "",
         )
     except Exception:  # noqa: BLE001  (la tabla puede no existir si falta migrate)
         log.warning("No se pudo registrar la consulta de IA", exc_info=True)
+        return None
+
+
+def _historial_sql(request, conversacion):
+    """Preguntas anteriores de la conversación con su SQL, para entender las repreguntas («¿y por división?»)."""
+    try:
+        previas = ConsultaIA.objects.filter(sesion=_sesion(request), conversacion=conversacion, tipo="resultado")[:4]
+    except Exception:  # noqa: BLE001
+        return []
+    return [{"pregunta": c.pregunta, "sql": c.sql} for c in reversed(list(previas))]
 
 
 @require_POST
 def consultar(request):
-    """POST /ia/consultar/  {"pregunta": "...", "historial": [{"pregunta": "...", "sql": "..."}]}"""
+    """POST /ia/consultar/  {"pregunta": "...", "modulo": "pedidos" | ""}"""
     try:
         cuerpo = json.loads(request.body)
     except json.JSONDecodeError:
@@ -64,21 +130,44 @@ def consultar(request):
     pregunta = (cuerpo.get("pregunta") or "").strip()[:1000]
     if not pregunta:
         return JsonResponse({"error": "Escribí una pregunta."}, status=400)
-    historial = cuerpo.get("historial") if isinstance(cuerpo.get("historial"), list) else []
     modulo = obtener_modulo(str(cuerpo.get("modulo") or "")) if cuerpo.get("modulo") else None
+    slug = modulo["slug"] if modulo else ""
+    conversacion = _conversacion(request, slug)
 
     try:
-        resultado = responder_pregunta(pregunta, historial, modulo)
+        resultado = responder_pregunta(pregunta, _historial_sql(request, conversacion), modulo)
     except ErrorConsulta as e:
-        _registrar(request, pregunta, error=str(e), proveedor=settings.IA_PROVEEDOR)
-        return JsonResponse({"error": str(e)}, status=422)
+        c = _registrar(request, pregunta, slug, conversacion, error=str(e))
+        return JsonResponse({"error": str(e), "id": getattr(c, "id", None)}, status=422)
     except Exception as e:  # noqa: BLE001
         log.exception("Error en la consulta de IA")
-        _registrar(request, pregunta, error=str(e), proveedor=settings.IA_PROVEEDOR)
-        return JsonResponse({"error": f"No se pudo responder: {e}"}, status=502)
+        c = _registrar(request, pregunta, slug, conversacion, error=str(e))
+        return JsonResponse({"error": f"No se pudo responder: {e}", "id": getattr(c, "id", None)}, status=502)
 
-    _registrar(request, pregunta, resultado, proveedor=settings.IA_PROVEEDOR)
-    return JsonResponse(resultado)
+    c = _registrar(request, pregunta, slug, conversacion, resultado)
+    respuesta = {k: v for k, v in resultado.items() if k != "sql"}
+    respuesta.update({"id": getattr(c, "id", None), "pregunta": pregunta})
+    return JsonResponse(respuesta)
+
+
+@require_POST
+def nueva_conversacion(request):
+    """POST /ia/nueva/  {"modulo": "..."}: las próximas preguntas no arrastran el contexto de las anteriores."""
+    try:
+        cuerpo = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        cuerpo = {}
+    _conversacion(request, str(cuerpo.get("modulo") or ""), nueva=True)
+    return JsonResponse({"ok": True})
+
+
+def consulta_guardada(request, id_consulta):
+    """GET /ia/consulta/<id>/: una pregunta anterior de este navegador, para volver a mostrarla."""
+    try:
+        c = ConsultaIA.objects.get(id=id_consulta, sesion=_sesion(request))
+    except ConsultaIA.DoesNotExist:
+        return JsonResponse({"error": "No se encontró esa pregunta."}, status=404)
+    return JsonResponse(_para_pantalla(c))
 
 
 @require_POST
