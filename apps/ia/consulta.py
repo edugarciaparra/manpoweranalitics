@@ -43,7 +43,7 @@ class ErrorConsulta(Exception):
 
 def _sistema_sql():
     return f"""Sos Rafa, el analista de datos de Manpower Uruguay (empresa de recursos humanos: pedidos de personal de clientes, candidatos, entrevistas, asignaciones de personal, facturación y viáticos).
-Traducís preguntas en español a UNA consulta T-SQL de SQL Server sobre la base sgo_new.
+Conversás con usuarios de Manpower sobre sus datos. Cuando hacen falta datos nuevos, los pedís con UNA consulta T-SQL de SQL Server sobre la base sgo_new: el portal la ejecuta y después vos analizás el resultado. Vos nunca accedés a la base.
 
 Reglas:
 - Solo SELECT (se permite WITH). Nada que modifique datos.
@@ -65,18 +65,29 @@ Relaciones:
 Códigos y criterios:
 {CODIGOS.strip()}
 
-Respondé SOLO con un JSON, sin texto antes ni después:
+Respondé SOLO con un JSON, sin texto antes ni después, de una de estas formas:
+
+1) Hacen falta datos nuevos:
 {{"sql": "...", "titulo": "título corto del resultado", "explicacion": "qué calcula, en una frase",
   "grafico": {{"tipo": "barras" | "barras_h" | "lineas" | "torta" | "ninguno", "x": "columna de categorías o fechas", "y": ["columnas numéricas"]}}}}
 Siempre que el resultado tenga varias filas, armalo para que se pueda graficar (una columna de categorías o fechas y al menos una numérica). Usá "barras_h" para rankings, "lineas" para series en el tiempo, "torta" solo con 6 categorías o menos que suman un total, "ninguno" solo para un único número.
-Si la pregunta es ambigua o no se puede responder con estas tablas: {{"aclaracion": "pregunta corta al usuario"}}"""
+
+2) Lo que piden se hace con el ÚLTIMO resultado de la conversación (resumirlo, redactarlo en párrafos, explicarlo, compararlo, destacar algo, verlo en otro gráfico): no vuelvas a consultar.
+{{"usar_anterior": true, "titulo": "título corto", "grafico": {{"tipo": "...", "x": "...", "y": ["..."]}}}}
+
+3) Preguntas sobre el tema que no necesitan datos (qué significa un indicador, cómo se calcula, qué se puede analizar, qué hablamos antes) o saludos:
+{{"respuesta": "texto en español rioplatense"}}
+En este caso no inventes cifras: usá solo números que ya aparezcan en la conversación.
+Si la pregunta no tiene que ver con Manpower ni con sus datos, respondé con esta forma explicando amablemente que solo podés ayudar con eso y sugerí algo que sí puedas responder.
+
+4) La pregunta es ambigua o no se puede responder con estas tablas: {{"aclaracion": "pregunta corta al usuario"}}"""
 
 
-_SISTEMA_RESPUESTA = """Sos Rafa, el analista de datos de Manpower Uruguay. Te paso una pregunta, la consulta que se ejecutó y su resultado.
-Respondé en español rioplatense, claro y breve:
-- Primero la respuesta directa en una o dos frases, con los números concretos.
-- Después, si aportan, hasta 3 hallazgos cortos, cada uno en una línea que empiece con "- ".
-Usá solo los datos del resultado; si están recortados, aclaralo. Números con punto de miles (1.234) y coma decimal. No muestres el SQL."""
+_SISTEMA_RESPUESTA = """Sos Rafa, el analista de datos de Manpower Uruguay. Te paso la conversación, la pregunta nueva y el resultado de los datos que ejecutó el portal.
+Respondé en español rioplatense y claro.
+- Si el usuario pide un formato (un resumen, una cantidad de párrafos, una lista, un texto para un informe), seguilo.
+- Si no pide nada especial: primero la respuesta directa en una o dos frases con los números concretos y después, si aportan, hasta 3 hallazgos cortos, cada uno en una línea que empiece con "- ".
+Usá solo los datos del resultado y de la conversación; no inventes cifras. Si el resultado está recortado, aclaralo. Números con punto de miles (1.234) y coma decimal. No muestres SQL."""
 
 
 def _json_de(texto):
@@ -122,14 +133,31 @@ def ejecutar(sql):
     return columnas, [[_valor(v) for v in f] for f in filas[:MAX_FILAS]], recortado
 
 
+FILAS_POR_TURNO = 15      # filas de cada resultado anterior que se le recuerdan al modelo
+
+
+def _memoria(historial):
+    """Texto con lo que se habló en la conversación: preguntas, consultas, resultados resumidos y respuestas."""
+    partes = []
+    for i, h in enumerate((historial or [])[-TURNOS_HISTORIAL:], 1):
+        lineas = [f"[{i}] Pregunta: {str(h.get('pregunta', ''))[:500]}"]
+        if h.get("sql"):
+            lineas.append(f"Consulta ejecutada: {str(h['sql'])[:2500]}")
+        if h.get("columnas"):
+            filas = (h.get("filas") or [])[:FILAS_POR_TURNO]
+            lineas.append(f"Resultado ({h.get('total_filas', len(filas))} filas). Columnas: "
+                          f"{json.dumps(h['columnas'], ensure_ascii=False)}. Primeras filas: "
+                          f"{json.dumps(filas, ensure_ascii=False, default=str)}")
+        if h.get("respuesta"):
+            lineas.append(f"Tu respuesta: {str(h['respuesta'])[:1200]}")
+        partes.append("\n".join(lineas))
+    return "\n\n".join(partes)
+
+
 def _mensajes(pregunta, historial):
-    mensajes = []
-    for h in (historial or [])[-TURNOS_HISTORIAL:]:
-        if h.get("pregunta") and h.get("sql"):
-            mensajes.append({"role": "user", "content": str(h["pregunta"])[:500]})
-            mensajes.append({"role": "assistant", "content": json.dumps({"sql": str(h["sql"])[:4000]})})
-    mensajes.append({"role": "user", "content": pregunta})
-    return mensajes
+    memoria = _memoria(historial)
+    contenido = f"Conversación hasta ahora:\n{memoria}\n\nPregunta nueva: {pregunta}" if memoria else pregunta
+    return [{"role": "user", "content": contenido}]
 
 
 def _enfoque(modulo):
@@ -147,7 +175,7 @@ def _generar_y_ejecutar(proveedor, pregunta, historial, modulo=None):
     ultimo_error = None
     for intento in range(2):
         plan = _json_de(proveedor.completar(sistema, mensajes, max_tokens=1500))
-        if plan.get("aclaracion"):
+        if plan.get("aclaracion") or plan.get("respuesta") or plan.get("usar_anterior"):
             return plan, None
         sql = plan.get("sql", "")
         try:
@@ -166,10 +194,12 @@ def _generar_y_ejecutar(proveedor, pregunta, historial, modulo=None):
     raise ErrorConsulta(f"La consulta no se pudo ejecutar: {str(ultimo_error)[:300]}")
 
 
-def _redactar(proveedor, pregunta, plan, columnas, filas, recortado):
+def _redactar(proveedor, pregunta, plan, columnas, filas, recortado, historial=None):
     muestra = filas[:FILAS_PARA_MODELO]
+    memoria = _memoria(historial)
     contenido = (
-        f"Pregunta: {pregunta}\n"
+        (f"Conversación hasta ahora:\n{memoria}\n\n" if memoria else "") +
+        f"Pregunta nueva: {pregunta}\n"
         f"Qué calcula: {plan.get('explicacion', '')}\n"
         f"Columnas: {json.dumps(columnas, ensure_ascii=False)}\n"
         f"Filas en total: {len(filas)}{' (recortado al máximo)' if recortado else ''}\n"
@@ -189,11 +219,23 @@ def responder_pregunta(pregunta, historial=None, modulo=None):
     plan, datos = _generar_y_ejecutar(proveedor, pregunta, historial, modulo)
     if plan.get("aclaracion"):
         return {"tipo": "aclaracion", "respuesta": plan["aclaracion"]}
+    if plan.get("respuesta") and not plan.get("usar_anterior"):
+        return {"tipo": "conversacion", "titulo": plan.get("titulo", ""), "respuesta": plan["respuesta"],
+                "segundos": round(time.monotonic() - inicio, 1)}
+
+    if plan.get("usar_anterior"):
+        anterior = next((h for h in reversed(historial or []) if h.get("columnas_completas")), None)
+        if anterior is None:
+            return {"tipo": "aclaracion", "respuesta": "No tengo un resultado anterior en esta conversación. "
+                                                       "¿Sobre qué datos querés que trabaje?"}
+        plan.setdefault("titulo", anterior.get("titulo", ""))
+        plan["sql"] = anterior.get("sql", "")
+        datos = (anterior["columnas_completas"], anterior["filas_completas"], anterior.get("recortado", False))
 
     base = {"titulo": plan.get("titulo", ""), "explicacion": plan.get("explicacion", ""), "sql": plan["sql"]}
 
     columnas, filas, recortado = datos
-    respuesta = _redactar(proveedor, pregunta, plan, columnas, filas, recortado) if filas else \
+    respuesta = _redactar(proveedor, pregunta, plan, columnas, filas, recortado, historial) if filas else \
         "La consulta no devolvió resultados. Probá con otro período o con menos filtros."
     return {
         **base, "tipo": "resultado", "respuesta": respuesta,

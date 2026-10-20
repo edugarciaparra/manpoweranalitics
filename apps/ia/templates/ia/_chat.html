@@ -1,7 +1,7 @@
 {# Conversación con Rafa: a la izquierda sugerencias y preguntas anteriores, a la derecha las respuestas #}
 <div class="rafa-chat" id="rafa-chat"
      data-url="{% url 'ia:consultar_api' %}" data-url-nueva="{% url 'ia:nueva' %}"
-     data-url-consulta="{% url 'ia:consulta' 0 %}" data-modulo="{{ modulo_rafa|default:'' }}"
+     data-url-consulta="{% url 'ia:consulta' 0 %}" data-url-continuar="{% url 'ia:continuar' %}" data-modulo="{{ modulo_rafa|default:'' }}"
      data-inicial="{{ pregunta_inicial }}">
   {% csrf_token %}
 
@@ -24,7 +24,7 @@
       <ul class="rafa-lista" id="nl-historial">
         {% for h in historial %}
         <li><button type="button" class="rafa-item rafa-hist{% if h.actual %} actual{% endif %}{% if h.error %} con-error{% endif %}"
-                    data-id="{{ h.id }}" data-pregunta="{{ h.pregunta }}">
+                    data-id="{{ h.id }}" data-conv="{{ h.conversacion }}" title="Abrir esta conversación para seguirla">
           <span class="rafa-hist-texto">{{ h.pregunta }}</span><span class="rafa-hist-fecha">{{ h.fecha }}</span>
         </button></li>
         {% endfor %}

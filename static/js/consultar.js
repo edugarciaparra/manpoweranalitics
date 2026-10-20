@@ -174,39 +174,52 @@
   }
 
   // ---------- Preguntas anteriores (menú del costado) ----------
-  function agregarAlHistorial(id, pregunta, conError) {
+  function agregarAlHistorial(id, pregunta, conError, conv) {
     if (!id) return;
     historialVacio.hidden = true;
     const li = document.createElement("li");
     const ahora = new Date();
     const fecha = ahora.toLocaleDateString("es-UY", { day: "2-digit", month: "2-digit" }) + " " +
       ahora.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit" });
-    li.innerHTML = `<button type="button" class="rafa-item rafa-hist actual${conError ? " con-error" : ""}" data-id="${id}">` +
+    li.innerHTML = `<button type="button" class="rafa-item rafa-hist actual${conError ? " con-error" : ""}" data-id="${id}" data-conv="${escapar(conv || "")}">` +
       `<span class="rafa-hist-texto">${escapar(pregunta)}</span><span class="rafa-hist-fecha">${fecha}</span></button>`;
     listaHistorial.prepend(li);
     li.querySelector("button").addEventListener("click", () => abrirAnterior(li.querySelector("button")));
   }
 
+  function marcarActual(conv) {
+    listaHistorial.querySelectorAll(".rafa-hist").forEach((b) => b.classList.toggle("actual", !!conv && b.dataset.conv === conv));
+  }
+
+  // Abrir una pregunta anterior: si es de otra conversación, se trae entera y se sigue desde ahí
   async function abrirAnterior(boton) {
     const id = boton.dataset.id;
-    const existente = conversacion.querySelector(`.nl-turno[data-id="${id}"]`);
-    if (existente) {
-      existente.scrollIntoView({ behavior: "smooth", block: "start" });
-      existente.classList.add("resaltado");
-      setTimeout(() => existente.classList.remove("resaltado"), 1600);
-      return;
+    let destino = conversacion.querySelector(`.nl-turno[data-id="${id}"]`);
+    if (!destino) {
+      try {
+        const r = await fetch(raiz.dataset.urlContinuar, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": csrf },
+          body: JSON.stringify({ id }),
+        });
+        const datos = await r.json();
+        if (!r.ok) throw new Error(datos.error || "No se encontró esa conversación.");
+        graficos.splice(0).forEach((g) => g.dispose());
+        conversacion.innerHTML = "";
+        datos.turnos.forEach((t) => pintarResultado(nuevoTurno(t.pregunta), t));
+        marcarActual(datos.conversacion);
+        destino = conversacion.querySelector(`.nl-turno[data-id="${id}"]`);
+      } catch (e) {
+        pintarResultado(nuevoTurno(boton.querySelector(".rafa-hist-texto").textContent), { error: e.message });
+        return;
+      }
     }
-    const turno = nuevoTurno(boton.querySelector(".rafa-hist-texto").textContent);
-    turno.classList.add("anterior");
-    turno.scrollIntoView({ behavior: "smooth", block: "start" });
-    try {
-      const r = await fetch(raiz.dataset.urlConsulta.replace(/0\/$/, id + "/"));
-      const datos = await r.json();
-      if (!r.ok) throw new Error(datos.error || "No se encontró esa pregunta.");
-      pintarResultado(turno, datos);
-    } catch (e) {
-      pintarResultado(turno, { error: e.message });
+    if (destino) {
+      destino.scrollIntoView({ behavior: "smooth", block: "start" });
+      destino.classList.add("resaltado");
+      setTimeout(() => destino.classList.remove("resaltado"), 1600);
     }
+    texto.focus();
   }
 
   async function preguntar(pregunta) {
@@ -229,8 +242,10 @@
       texto.focus();
     }
     pintarResultado(turno, datos);
-    agregarAlHistorial(datos.id, pregunta, !!datos.error);
+    agregarAlHistorial(datos.id, pregunta, !!datos.error, datos.conversacion || conversacionActual());
   }
+
+  const conversacionActual = () => (listaHistorial.querySelector(".rafa-hist.actual") || {}).dataset?.conv || "";
 
   // ---------- Eventos ----------
   form.addEventListener("submit", (e) => {
@@ -265,7 +280,7 @@
     graficos.splice(0).forEach((g) => g.dispose());
     conversacion.innerHTML = "";
     bienvenida.hidden = false;
-    listaHistorial.querySelectorAll(".rafa-hist.actual").forEach((b) => b.classList.remove("actual"));
+    marcarActual("");
     texto.focus();
   });
   window.addEventListener("resize", () => graficos.forEach((g) => g.resize()));

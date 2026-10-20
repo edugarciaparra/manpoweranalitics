@@ -918,7 +918,6 @@ body { letter-spacing: -.005em; background: #F5F7FB; }
 .pagina-rafa .nl-respuesta { padding: .35rem 1rem .9rem 3.4rem; font-size: .92rem; }
 .pagina-rafa .nl-vista { padding: .8rem 1rem 1rem; }
 .nl-turno.resaltado .nl-tarjeta { box-shadow: 0 0 0 2px var(--c, var(--mp-azul)) !important; }
-.nl-turno.anterior .nl-yo::after { content: " · pregunta anterior"; opacity: .75; font-size: .8em; }
 .nl-tipos { display: inline-flex; gap: .2rem; margin-left: .5rem; padding-bottom: .35rem; }
 .nl-tipos button { border: 1px solid var(--linea); background: #fff; color: var(--tinta-suave); font-size: .78rem;
   border-radius: 999px; padding: .15rem .6rem; }

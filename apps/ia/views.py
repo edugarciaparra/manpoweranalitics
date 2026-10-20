@@ -77,7 +77,8 @@ def contexto_chat(request, modulo=None):
     return {
         "sugerencias": modulo.get("preguntas", []) if modulo else SUGERENCIAS,
         "historial": [{"id": c.id, "pregunta": c.pregunta, "fecha": c.fecha.strftime("%d/%m %H:%M"),
-                       "actual": c.conversacion == actual, "error": bool(c.error)} for c in anteriores],
+                       "conversacion": c.conversacion, "actual": c.conversacion == actual,
+                       "error": bool(c.error)} for c in anteriores],
         "turnos": turnos,
         "modulo_rafa": slug,
         "pregunta_inicial": request.GET.get("q", "")[:500],
@@ -110,14 +111,29 @@ def _registrar(request, pregunta, modulo, conversacion, resultado=None, error=""
         return None
 
 
-def _historial_sql(request, conversacion):
-    """Preguntas anteriores de la conversación con su SQL, para entender las repreguntas («¿y por división?»)."""
+def _historial(request, conversacion):
+    """Lo que se habló en la conversación (para que Rafa la recuerde): preguntas, consultas, resultados y respuestas.
+    El último resultado va completo por si piden trabajar sobre él («resumilo en 3 párrafos»)."""
     try:
-        previas = list(ConsultaIA.objects.filter(sesion=_sesion(request), conversacion=conversacion, tipo="resultado")[:4])
+        previas = list(ConsultaIA.objects.filter(sesion=_sesion(request), conversacion=conversacion)
+                       .exclude(tipo="error")[:4])
     except Exception:  # noqa: BLE001  (falta python manage.py migrate)
         log.warning("No se pudo leer la conversación de Rafa", exc_info=True)
         return []
-    return [{"pregunta": c.pregunta, "sql": c.sql} for c in reversed(previas)]
+    salida = []
+    for c in reversed(previas):
+        try:
+            r = json.loads(c.resultado) if c.resultado else {}
+        except json.JSONDecodeError:
+            r = {}
+        salida.append({"pregunta": c.pregunta, "sql": c.sql, "titulo": r.get("titulo", ""),
+                       "respuesta": r.get("respuesta", ""), "columnas": r.get("columnas"),
+                       "filas": r.get("filas"), "total_filas": len(r.get("filas") or []),
+                       "recortado": r.get("recortado", False)})
+    ultimo = next((h for h in reversed(salida) if h["columnas"]), None)
+    if ultimo:
+        ultimo["columnas_completas"], ultimo["filas_completas"] = ultimo["columnas"], ultimo["filas"]
+    return salida
 
 
 @require_POST
@@ -136,7 +152,7 @@ def consultar(request):
     conversacion = _conversacion(request, slug)
 
     try:
-        resultado = responder_pregunta(pregunta, _historial_sql(request, conversacion), modulo)
+        resultado = responder_pregunta(pregunta, _historial(request, conversacion), modulo)
     except ErrorConsulta as e:
         c = _registrar(request, pregunta, slug, conversacion, error=str(e))
         return JsonResponse({"error": str(e), "id": getattr(c, "id", None)}, status=422)
@@ -147,7 +163,7 @@ def consultar(request):
 
     c = _registrar(request, pregunta, slug, conversacion, resultado)
     respuesta = {k: v for k, v in resultado.items() if k != "sql"}
-    respuesta.update({"id": getattr(c, "id", None), "pregunta": pregunta})
+    respuesta.update({"id": getattr(c, "id", None), "pregunta": pregunta, "conversacion": conversacion})
     return JsonResponse(respuesta)
 
 
@@ -160,6 +176,21 @@ def nueva_conversacion(request):
         cuerpo = {}
     _conversacion(request, str(cuerpo.get("modulo") or ""), nueva=True)
     return JsonResponse({"ok": True})
+
+
+@require_POST
+def continuar_conversacion(request):
+    """POST /ia/continuar/  {"id": 123}: vuelve a la conversación de esa pregunta para seguirla."""
+    try:
+        cuerpo = json.loads(request.body or "{}")
+        c = ConsultaIA.objects.get(id=int(cuerpo.get("id")), sesion=_sesion(request))
+    except (ValueError, TypeError, json.JSONDecodeError, ConsultaIA.DoesNotExist):
+        return JsonResponse({"error": "No se encontró esa conversación."}, status=404)
+    except Exception:  # noqa: BLE001  (falta python manage.py migrate)
+        return JsonResponse({"error": "Falta actualizar la base del portal: corré python manage.py migrate."}, status=503)
+    request.session[_clave_conversacion(c.modulo)] = c.conversacion
+    turnos = ConsultaIA.objects.filter(sesion=c.sesion, conversacion=c.conversacion).order_by("fecha")
+    return JsonResponse({"conversacion": c.conversacion, "turnos": [_para_pantalla(t) for t in turnos]})
 
 
 def consulta_guardada(request, id_consulta):
