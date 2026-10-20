@@ -841,7 +841,7 @@ body { background: var(--papel); color: var(--tinta); }
 /* =====================================================================
    Rediseño: letra más chica en todo el portal y estilo más liviano
    ===================================================================== */
-html { font-size: 14px; }
+html { font-size: 15px; }
 body { letter-spacing: -.005em; background: #F5F7FB; }
 :root { --papel: #F5F7FB; --linea: #E4E9F1; --sombra: 0 1px 2px rgba(15, 31, 58, .05), 0 2px 8px rgba(15, 31, 58, .04); }
 
