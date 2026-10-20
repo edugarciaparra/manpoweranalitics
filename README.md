@@ -105,7 +105,7 @@ python manage.py probar_sgo
 
 - Las tablas internas de Django van a SQLite; en `sgo_new` no se crea ni se migra nada.
 - Los módulos leen con `apps.core.db.consultar(sql, params)`, que devuelve una lista de dicts.
-- La conexión es obligatoria: si `SGO_DB_HOST` está vacío o la base no responde, cada pantalla muestra el error.
+- Por defecto usa la misma conexión que el SGO: `EGARCIA-LATITUD` / `sgo_new` con autenticación de Windows y ODBC Driver 17. Si la base no responde, cada pantalla muestra el error.
 - Las variables llevan prefijo `SGO_` para no chocar con un `DB_USER` definido en Windows,
   y el `.env` siempre le gana a las variables del sistema.
 

@@ -113,7 +113,7 @@ WSGI_APPLICATION = "config.wsgi.application"
 # "default": SQLite, solo para las tablas internas de Django (sesiones, admin),
 #            así no se crea nada en la base de Manpower.
 # "sgo":     SQL Server de Manpower, solo para leer datos en los módulos.
-#            Es obligatoria: sin SGO_DB_HOST las pantallas muestran el error de conexión.
+#            Si la base no responde, las pantallas muestran el error de conexión.
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
@@ -121,18 +121,19 @@ DATABASES = {
     }
 }
 
-SGO_DB_HOST = env("SGO_DB_HOST", "")
-if SGO_DB_HOST:
-    DATABASES["sgo"] = {
-        "ENGINE": "mssql",
-        "NAME": env("SGO_DB_NAME", "sgo_new"),
-        "HOST": SGO_DB_HOST,
-        "PORT": env("SGO_DB_PORT", ""),
-        # Usuario vacío = autenticación de Windows (Trusted Connection)
-        "USER": env("SGO_DB_USER", ""),
-        "PASSWORD": env("SGO_DB_PASSWORD", ""),
-        "OPTIONS": {"driver": env("SGO_DB_DRIVER", "ODBC Driver 17 for SQL Server")},
-    }
+# Misma conexión que el SGO (Src/settings.py): servidor EGARCIA-LATITUD, base sgo_new,
+# autenticación de Windows y ODBC Driver 17. Cualquier valor se puede cambiar en el .env.
+SGO_DB_HOST = env("SGO_DB_HOST", "") or "EGARCIA-LATITUD"
+DATABASES["sgo"] = {
+    "ENGINE": "mssql",
+    "NAME": env("SGO_DB_NAME", "") or "sgo_new",
+    "HOST": SGO_DB_HOST,
+    "PORT": env("SGO_DB_PORT", ""),
+    # Usuario vacío = autenticación de Windows (Trusted Connection), como en el SGO
+    "USER": env("SGO_DB_USER", ""),
+    "PASSWORD": env("SGO_DB_PASSWORD", ""),
+    "OPTIONS": {"driver": env("SGO_DB_DRIVER", "") or "ODBC Driver 17 for SQL Server"},
+}
 
 # Evita que Django intente crear sus tablas en la base de Manpower
 DATABASE_ROUTERS = ["apps.core.db.SoloLecturaSgoRouter"]
@@ -147,7 +148,7 @@ AUTH_PASSWORD_VALIDATORS = [
 LANGUAGE_CODE = "es-uy"
 TIME_ZONE = "America/Montevideo"
 USE_I18N = True
-USE_TZ = True
+USE_TZ = False  # como el SGO: las fechas de sgo_new no tienen zona horaria
 
 STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]

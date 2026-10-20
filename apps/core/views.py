@@ -1,5 +1,6 @@
 import logging
 
+from django.core.exceptions import ImproperlyConfigured
 from django.db import DatabaseError
 from django.http import Http404, JsonResponse
 from django.shortcuts import render
@@ -11,12 +12,14 @@ from .registry import obtener_catalogo, obtener_modulo, obtener_modulos
 from .utils import PERIODO_DEFECTO, PERIODOS
 
 log = logging.getLogger(__name__)
-ERRORES_BASE = (BaseNoDisponible, DatabaseError)
+ERRORES_BASE = (BaseNoDisponible, DatabaseError, ImproperlyConfigured)
 
 
 def _mensaje_error(e):
     if isinstance(e, BaseNoDisponible):
         return str(e)
+    if isinstance(e, ImproperlyConfigured):
+        return f"Falta el driver para conectarse a SQL Server (ODBC Driver 17): {str(e)[:300]}"
     return f"La base de Manpower no respondió: {str(e)[:400]}"
 
 
