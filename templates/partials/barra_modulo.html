@@ -1,0 +1,28 @@
+{# Barra del módulo: dónde estoy y un desplegable para cambiar de análisis (reemplaza al menú lateral) #}
+<div class="barra-modulo" style="--c: {{ modulo.color }}">
+  <nav class="migas" aria-label="Ubicación">
+    <a href="{% url 'core:landing' %}">Inicio</a>
+    <i class="bi bi-chevron-right" aria-hidden="true"></i>
+    <a href="{{ modulo.url }}" class="migas-modulo"><i class="bi {{ modulo.icono }}" aria-hidden="true"></i>{{ modulo.titulo }}</a>
+    <i class="bi bi-chevron-right" aria-hidden="true"></i>
+    <div class="dropdown d-inline-block">
+      <button class="btn-cambiar dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+        {% if item %}{{ item.titulo }}{% elif en_rafa %}Preguntale a Rafa{% else %}Todos los análisis{% endif %}
+      </button>
+      <ul class="dropdown-menu menu-desplegable" style="--c: {{ modulo.color }}">
+        <li><a class="dropdown-item item-portada{% if not item and not en_rafa %} active{% endif %}" href="{{ modulo.url }}">
+          <i class="bi bi-grid" aria-hidden="true"></i>Todos los análisis</a></li>
+        <li><a class="dropdown-item item-rafa{% if en_rafa %} active{% endif %}" href="{% url 'core:rafa' modulo.slug %}">
+          <span class="rafa-mini" aria-hidden="true">R</span>Preguntale a Rafa</a></li>
+        <li><hr class="dropdown-divider"></li>
+        {% for a in analisis %}
+        <li><a class="dropdown-item{% if item.slug == a.slug %} active{% endif %}" href="{% url 'core:analisis' modulo.slug a.slug %}">
+          <i class="bi {{ a.icono }}" aria-hidden="true"></i>{{ a.titulo }}</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+  </nav>
+  {% if not en_rafa and not item %}
+  <a class="btn-rafa-modulo" href="{% url 'core:rafa' modulo.slug %}"><span class="rafa-mini" aria-hidden="true">R</span>Preguntale a Rafa</a>
+  {% endif %}
+</div>

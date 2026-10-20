@@ -4,14 +4,13 @@
 {% block titulo %}{{ item.titulo }} · {{ modulo.titulo }}{% endblock %}
 
 {% block contenido %}
-<div class="container-xl pagina-modulo" style="--c: {{ modulo.color }}">
+<div class="container-fluid ancho pagina-modulo" style="--c: {{ modulo.color }}">
+  {% include "partials/barra_modulo.html" %}
   <div class="row g-4">
-    <div class="col-lg-3">{% include "partials/menu_analisis.html" %}</div>
 
-    <div class="col-lg-9">
+    <div class="col-12">
       <header class="cabecera cabecera-analisis">
         <div>
-          <a class="volver" href="{{ modulo.url }}"><i class="bi bi-arrow-left" aria-hidden="true"></i> {{ modulo.titulo }}</a>
           <h1>{{ item.titulo }}</h1>
           <p class="sub">{{ item.descripcion }}</p>
         </div>
@@ -115,15 +114,16 @@
       </nav>
       {% endif %}
 
+      <div class="grilla-secciones">
       {% for s in datos.secciones %}
-      <section class="seccion" id="seccion-{{ forloop.counter }}" aria-labelledby="seccion-t-{{ forloop.counter }}">
+      <section class="seccion{% if s.ancha %} seccion-ancha{% endif %}" id="seccion-{{ forloop.counter }}" aria-labelledby="seccion-t-{{ forloop.counter }}">
         <div class="seccion-cabeza">
           <h2 id="seccion-t-{{ forloop.counter }}">{{ s.titulo }}</h2>
           {% if s.descripcion %}<p>{{ s.descripcion }}</p>{% endif %}
         </div>
 
         <div class="row g-4">
-          <div class="col-12">
+          <div class="{% if s.tabla and s.grafico %}col-xxl-7{% else %}col-12{% endif %}">
             {% if s.grafico %}
             <div class="panel panel-grafico">
               <button type="button" class="btn-icono btn-descargar" data-grafico="grafico-{{ forloop.counter0 }}"
@@ -150,8 +150,10 @@
             <ul class="lectura">{% for l in s.lectura %}<li>{{ l }}</li>{% endfor %}</ul>
             {% endif %}
 
-            {% if s.tabla %}
-            <div class="panel">
+          </div>
+          {% if s.tabla %}
+          <div class="{% if s.grafico %}col-xxl-5{% else %}col-12{% endif %}">
+            <div class="panel panel-tabla">
               <h3>{{ s.tabla.titulo }}</h3>
               {% if s.tabla.filas %}
               <div class="table-responsive">
@@ -164,12 +166,12 @@
               <p class="vacio">{{ s.tabla.vacio }}</p>
               {% endif %}
             </div>
-            {% endif %}
           </div>
-
+          {% endif %}
         </div>
       </section>
       {% endfor %}
+      </div>
     </div>
   </div>
 </div>

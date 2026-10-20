@@ -16,8 +16,8 @@
 <body>
   <a class="visually-hidden-focusable salto" href="#contenido">Ir al contenido</a>
 
-  <nav class="navbar navbar-expand-lg navbar-dark barra">
-    <div class="container-xl">
+  <nav class="navbar navbar-expand-xl navbar-dark barra">
+    <div class="container-fluid ancho">
       <a class="navbar-brand marca" href="{% url 'core:landing' %}">
         <span class="marca-signo" aria-hidden="true"></span>Manpower Analytics
       </a>
@@ -26,16 +26,28 @@
         <span class="navbar-toggler-icon"></span>
       </button>
       <div class="collapse navbar-collapse" id="menu">
-        <ul class="navbar-nav ms-auto gap-lg-1">
+        <ul class="navbar-nav ms-auto gap-xl-1">
           {% for m in menu_modulos %}
-          <li class="nav-item">
-            <a class="nav-link{% if m.url in request.path %} active{% endif %}"
-               href="{{ m.url }}"{% if m.url in request.path %} aria-current="page"{% endif %}>
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle{% if m.url in request.path %} active{% endif %}" href="{{ m.url }}"
+               role="button" data-bs-toggle="dropdown" aria-expanded="false"
+               {% if m.url in request.path %}aria-current="page"{% endif %}>
               <i class="bi {{ m.icono }} me-1" aria-hidden="true"></i>{{ m.titulo }}
             </a>
+            <ul class="dropdown-menu dropdown-menu-end menu-desplegable" style="--c: {{ m.color }}">
+              <li><a class="dropdown-item item-portada" href="{{ m.url }}">
+                <i class="bi bi-grid" aria-hidden="true"></i>Todos los análisis de {{ m.titulo|lower }}</a></li>
+              <li><a class="dropdown-item item-rafa{% if request.path == m.url_rafa %} active{% endif %}" href="{{ m.url_rafa }}">
+                <span class="rafa-mini" aria-hidden="true">R</span>Preguntale a Rafa</a></li>
+              <li><hr class="dropdown-divider"></li>
+              {% for a in m.analisis %}
+              <li><a class="dropdown-item{% if request.path == a.url %} active{% endif %}" href="{{ a.url }}">
+                <i class="bi {{ a.icono }}" aria-hidden="true"></i>{{ a.titulo }}</a></li>
+              {% endfor %}
+            </ul>
           </li>
           {% endfor %}
-          <li class="nav-item ms-lg-2">
+          <li class="nav-item ms-xl-2">
             <a class="nav-link nav-ia{% if '/ia/' in request.path %} active{% endif %}" href="{% url 'ia:consultar' %}">
               <i class="bi bi-chat-dots me-1" aria-hidden="true"></i>Preguntale a Rafa
             </a>
@@ -47,7 +59,7 @@
 
   {% if not base_conectada %}
   <div class="aviso-ejemplo" role="alert">
-    <div class="container-xl">
+    <div class="container-fluid ancho">
       <i class="bi bi-exclamation-triangle-fill me-2" aria-hidden="true"></i>
       <strong>El portal no está conectado a la base de Manpower.</strong>
       Copiá <code>.env.example</code> como <code>.env</code> en la carpeta del proyecto, completá <code>SGO_DB_HOST</code>
@@ -61,7 +73,7 @@
   </main>
 
   <footer class="pie">
-    <div class="container-xl">Manpower Uruguay ·
+    <div class="container-fluid ancho">Manpower Uruguay ·
       {% if base_conectada %}<i class="bi bi-database-check" aria-hidden="true"></i> Datos de {{ base_nombre }}{% else %}Base sin conectar{% endif %}
       {% if not ia_configurada %} · Rafa sin configurar{% endif %}</div>
   </footer>

@@ -787,3 +787,53 @@ body { background: var(--papel); color: var(--tinta); }
 .nl-icono-rafa { background: var(--c, #0B5CAB); color: #fff; font-weight: 800; font-style: normal; }
 .rafa-avatar-chico { display: inline-grid; width: 28px; height: 28px; font-size: .85rem; margin-right: .45rem; vertical-align: middle; box-shadow: none; }
 .offcanvas-title { display: flex; align-items: center; }
+
+/* ---------- Ancho de página y menús desplegables ---------- */
+.ancho { max-width: 1680px; margin-left: auto; margin-right: auto; padding-left: clamp(16px, 2.2vw, 32px); padding-right: clamp(16px, 2.2vw, 32px); }
+.barra .nav-link { white-space: nowrap; padding: .45rem .7rem; }
+.barra .dropdown-toggle::after { margin-left: .35rem; vertical-align: .15em; opacity: .7; }
+.menu-desplegable { min-width: 290px; max-height: 70vh; overflow-y: auto; padding: .4rem; border: 0;
+  border-radius: .9rem; box-shadow: 0 12px 32px rgba(6, 47, 95, .18); }
+.menu-desplegable .dropdown-item { display: flex; align-items: center; gap: .6rem; border-radius: .55rem;
+  padding: .5rem .7rem; font-size: .92rem; color: var(--tinta); white-space: normal; }
+.menu-desplegable .dropdown-item .bi { color: var(--c, var(--mp-azul)); font-size: 1rem; flex: none; }
+.menu-desplegable .dropdown-item:hover { background: var(--mp-celeste, #EAF2FC); color: var(--mp-azul-osc, #062F5F); }
+.menu-desplegable .dropdown-item.active, .menu-desplegable .dropdown-item:active { background: var(--c, var(--mp-azul)); color: #fff; }
+.menu-desplegable .dropdown-item.active .bi { color: #fff; }
+.menu-desplegable .item-portada { font-weight: 600; }
+.menu-desplegable .item-rafa { font-weight: 600; color: var(--c, var(--mp-azul)); }
+.rafa-mini { flex: none; width: 22px; height: 22px; border-radius: 50%; display: inline-grid; place-items: center;
+  background: var(--c, var(--mp-azul)); color: #fff; font-size: .72rem; font-weight: 800; font-style: normal; }
+.dropdown-item.active .rafa-mini { background: #fff; color: var(--c, var(--mp-azul)); }
+@media (max-width: 1199.98px) {
+  .barra .menu-desplegable { box-shadow: none; background: rgba(255, 255, 255, .97); max-height: none; }
+}
+
+/* Barra del módulo (ubicación + cambio de análisis) */
+.barra-modulo { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem;
+  margin-bottom: 1.25rem; padding: .55rem .75rem .55rem 1rem; background: #fff; border-radius: .9rem; box-shadow: var(--sombra); }
+.migas { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; font-size: .92rem; color: var(--tinta-suave); }
+.migas a { color: var(--tinta-suave); text-decoration: none; }
+.migas a:hover { color: var(--c, var(--mp-azul)); }
+.migas .bi-chevron-right { font-size: .7rem; opacity: .6; }
+.migas-modulo { display: inline-flex; align-items: center; gap: .35rem; font-weight: 600; color: var(--tinta) !important; }
+.migas-modulo .bi { color: var(--c, var(--mp-azul)); }
+.btn-cambiar { border: 1px solid var(--linea); background: #F7F9FC; color: var(--tinta); font-weight: 600;
+  border-radius: .6rem; padding: .3rem .7rem; font-size: .92rem; }
+.btn-cambiar:hover { border-color: var(--c, var(--mp-azul)); }
+.btn-rafa-modulo { display: inline-flex; align-items: center; gap: .45rem; text-decoration: none; font-weight: 600; font-size: .9rem;
+  color: var(--c, var(--mp-azul)); border: 1px solid var(--c, var(--mp-azul)); border-radius: 999px; padding: .3rem .85rem .3rem .4rem; }
+.btn-rafa-modulo:hover { background: var(--c, var(--mp-azul)); color: #fff; }
+.btn-rafa-modulo:hover .rafa-mini { background: #fff; color: var(--c, var(--mp-azul)); }
+.pagina-modulo { padding-top: 1.25rem; }
+
+/* Portada del módulo: análisis en grilla */
+.lista-analisis { grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); }
+.sub { max-width: 60rem; }
+
+/* Secciones: en pantallas anchas, dos por fila; las que tienen tabla ocupan toda la fila con la tabla al costado */
+@media (min-width: 1400px) {
+  .grilla-secciones { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 1.75rem; }
+  .grilla-secciones .seccion-ancha { grid-column: 1 / -1; }
+  .panel-tabla { max-height: 640px; overflow-y: auto; }
+}

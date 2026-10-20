@@ -80,6 +80,7 @@ def analisis(request, modulo, analisis):
             "modulo": mod, "analisis": list(catalogo), "item": item, "mensaje": _mensaje_error(e),
         }, status=503)
     datos["conclusiones"] = [c for c in datos.get("conclusiones", []) if c]
+    _marcar_anchas(datos["secciones"])
 
     return render(request, "core/analisis.html", {
         "modulo": mod,
@@ -92,6 +93,22 @@ def analisis(request, modulo, analisis):
         "filtros": para_plantilla(item["filtros"], filtros),
         "filtros_activos": activos(item["filtros"], filtros),
     })
+
+
+def _marcar_anchas(secciones):
+    """En pantallas anchas las secciones van de a dos por fila. Ocupan la fila entera las que
+    tienen tabla o no tienen gráfico, y la que quedaría sola entre dos de esas."""
+    tanda = []
+    for s in secciones + [None]:
+        ancha = s is None or bool(s.get("tabla")) or not s.get("grafico")
+        if s is not None:
+            s["ancha"] = ancha
+        if ancha:
+            if len(tanda) % 2:
+                tanda[-1]["ancha"] = True
+            tanda = []
+        else:
+            tanda.append(s)
 
 
 MAX_FILAS_DETALLE = 2000

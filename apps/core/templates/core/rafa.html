@@ -4,12 +4,11 @@
 {% block titulo %}Preguntale a Rafa · {{ modulo.titulo }}{% endblock %}
 
 {% block contenido %}
-<div class="container-xl pagina-modulo rafa" style="--c: {{ modulo.color }}">
+<div class="container-fluid ancho pagina-modulo rafa" style="--c: {{ modulo.color }}">
+  {% include "partials/barra_modulo.html" %}
   <div class="row g-4">
-    <div class="col-lg-3">{% include "partials/menu_analisis.html" %}</div>
 
-    <div class="col-lg-9">
-      <a class="volver" href="{{ modulo.url }}"><i class="bi bi-arrow-left" aria-hidden="true"></i> {{ modulo.titulo }}</a>
+    <div class="col-12">
       <header class="rafa-cabecera">
         <span class="rafa-avatar" aria-hidden="true">R</span>
         <div>

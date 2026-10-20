@@ -5,7 +5,7 @@
 
 {% block contenido %}
 <section class="portada">
-  <div class="container-xl">
+  <div class="container-fluid ancho">
     <p class="saludo" id="saludo">Hola, {{ usuario_nombre }}.</p>
     <h1 class="portada-titulo">¿Qué querés analizar?</h1>
 
@@ -24,7 +24,7 @@
   </div>
 </section>
 
-<section class="container-xl modulos" aria-label="Módulos de análisis">
+<section class="container-fluid ancho modulos" aria-label="Módulos de análisis">
   <div class="row g-3 g-lg-4" id="lista-modulos">
     {% for m in modulos %}
     <div class="col-12 col-md-6 col-xl-4 modulo-col"

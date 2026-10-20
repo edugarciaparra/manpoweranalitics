@@ -160,9 +160,12 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Se conecta por HTTP a la API que se configure (ver apps/ia/proveedores.py).
 # IA_PROVEEDOR: anthropic | openai (y compatibles) | azure | gemini
 # La IA nunca se conecta a la base: el portal ejecuta el SQL y le pasa el resultado.
-IA_PROVEEDOR = env("IA_PROVEEDOR", "")
-IA_API_KEY = env("IA_API_KEY", "")
-IA_MODELO = env("IA_MODELO", "")
-IA_URL = env("IA_URL", "")
+# Los valores salen de config/ia_config.py; si el .env tiene alguno, gana el .env.
+from . import ia_config  # noqa: E402
+
+IA_API_KEY = env("IA_API_KEY", "") or ia_config.API_KEY
+IA_PROVEEDOR = (env("IA_PROVEEDOR", "") or ia_config.PROVEEDOR) if IA_API_KEY else env("IA_PROVEEDOR", "")
+IA_MODELO = env("IA_MODELO", "") or ia_config.MODELO
+IA_URL = env("IA_URL", "") or ia_config.URL
 IA_AZURE_ENDPOINT = env("IA_AZURE_ENDPOINT", "")  # nombre anterior de IA_URL para Azure
 IA_AZURE_VERSION = env("IA_AZURE_VERSION", "2024-10-21")
