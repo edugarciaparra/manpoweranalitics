@@ -90,15 +90,25 @@ Respondé en español rioplatense y claro.
 Usá solo los datos del resultado y de la conversación; no inventes cifras. Si el resultado está recortado, aclaralo. Números con punto de miles (1.234) y coma decimal. No muestres SQL."""
 
 
+class FormatoInvalido(ErrorConsulta):
+    pass
+
+
 def _json_de(texto):
-    """Primer objeto JSON del texto (el modelo a veces lo envuelve en ```)."""
-    m = re.search(r"\{.*\}", texto or "", re.DOTALL)
+    """El JSON que devolvió el modelo (a veces lo envuelve en ``` o le agrega texto).
+    Si contestó con texto común, sin JSON, se toma como una respuesta de conversación."""
+    texto = (texto or "").strip()
+    if not texto:
+        raise FormatoInvalido("El modelo no devolvió nada.")
+    m = re.search(r"\{.*\}", texto, re.DOTALL)
     if not m:
-        raise ErrorConsulta("El modelo no devolvió una consulta.")
+        if texto.lstrip("`json \n").startswith("{") or '"sql"' in texto:
+            raise FormatoInvalido("El modelo devolvió un JSON cortado.")
+        return {"respuesta": texto}
     try:
         return json.loads(m.group(0))
     except json.JSONDecodeError as e:
-        raise ErrorConsulta("El modelo devolvió una respuesta con formato inválido.") from e
+        raise FormatoInvalido("El modelo devolvió un JSON incompleto o mal armado.") from e
 
 
 def _valor(v):
@@ -174,7 +184,17 @@ def _generar_y_ejecutar(proveedor, pregunta, historial, modulo=None):
     mensajes = _mensajes(pregunta, historial)
     ultimo_error = None
     for intento in range(2):
-        plan = _json_de(proveedor.completar(sistema, mensajes, max_tokens=1500))
+        crudo = proveedor.completar(sistema, mensajes, max_tokens=3000)
+        try:
+            plan = _json_de(crudo)
+        except FormatoInvalido as e:
+            ultimo_error = e
+            mensajes = mensajes[:1] + [
+                {"role": "assistant", "content": (crudo or "")[:3000] or "(vacío)"},
+                {"role": "user", "content": "Tu respuesta no fue un JSON válido. Devolvé SOLO el JSON completo, "
+                                            "sin texto antes ni después."},
+            ]
+            continue
         if plan.get("aclaracion") or plan.get("respuesta") or plan.get("usar_anterior"):
             return plan, None
         sql = plan.get("sql", "")
@@ -189,7 +209,7 @@ def _generar_y_ejecutar(proveedor, pregunta, historial, modulo=None):
                     {"role": "assistant", "content": json.dumps(plan, ensure_ascii=False)},
                     {"role": "user", "content": f"La consulta falló: {str(e)[:600].rstrip('.')}. Corregila y devolvé el JSON de nuevo."},
                 ]
-    if isinstance(ultimo_error, ConsultaNoPermitida):
+    if isinstance(ultimo_error, (ConsultaNoPermitida, FormatoInvalido)):
         raise ErrorConsulta(str(ultimo_error))
     raise ErrorConsulta(f"La consulta no se pudo ejecutar: {str(ultimo_error)[:300]}")
 
